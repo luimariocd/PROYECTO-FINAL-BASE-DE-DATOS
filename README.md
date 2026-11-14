@@ -2,15 +2,34 @@
 
 Repositorio oficial del Proyecto Final de Base de Datos (UCM). Incluye la arquitectura de base de datos Oracle, objetos PL/SQL, capa de aplicación y documentación de entrega.
 
-## Requisitos Previos (Entorno Local)
+## Requisitos Previos
 
 * **Git** instalado.
-* **Docker Desktop** instalado y ejecutándose con motor **WSL 2** *(recomendado para equipos con 8 GB o 16 GB de RAM; si tu equipo tiene 4 GB de RAM, sigue la guía en `CONEXION_REMOTA.md`)*.
-* **Visual Studio Code** con la extensión **Oracle SQL Developer for VSCode** (*Oracle Corporation*).
+* **Windows 10/11** con virtualización habilitada *(para equipos con 8 GB o 16 GB de RAM; si tu computador tiene 4 GB de RAM, no instales Docker y sigue la guía en `CONEXION_REMOTA.md`)*.
+* **Visual Studio Code** instalado.
 
 ---
 
-## 1. Clonar el Repositorio y Levantar Oracle con Docker
+## 1. Activar WSL 2 e Instalar Docker Desktop (Solo la primera vez)
+
+Docker Desktop necesita el **Subsistema de Windows para Linux (WSL 2)** para ejecutar el contenedor de Oracle. Si nunca lo has activado en tu PC, hazlo antes de abrir Docker:
+
+1. Abrir el menú **Inicio**, escribir `PowerShell`, hacer clic derecho sobre **Windows PowerShell** y elegir **Ejecutar como administrador**.
+2. Ejecutar el siguiente comando para instalar el motor WSL sin descargar distribuciones pesadas innecesarias:
+   ```powershell
+   wsl --install --no-distribution
+   ```
+3. Si Windows indica que WSL ya estaba instalado pero desactualizado, ejecutar enseguida:
+   ```powershell
+   wsl --update
+   ```
+4. **Reiniciar el computador** (obligatorio para activar los componentes de virtualización).
+5. Descargar e instalar **Docker Desktop para Windows** dejando marcada la opción **Use WSL 2 instead of Hyper-V** (y *All-users installation*).
+6. Abrir **Docker Desktop**, aceptar los términos y esperar a que el ícono de la ballena en la barra de tareas quede quieto indicando *Docker Desktop is running*.
+
+---
+
+## 2. Clonar el Repositorio y Levantar Oracle con Docker
 
 1. Clonar el proyecto y entrar a la carpeta:
    ```powershell
@@ -33,11 +52,20 @@ Repositorio oficial del Proyecto Final de Base de Datos (UCM). Incluye la arquit
 
 ---
 
-## 2. Conectar Visual Studio Code a Oracle
+## 3. Instalar la Extensión de Oracle en Visual Studio Code
 
-1. Abrir el proyecto en **Visual Studio Code**.
-2. Hacer clic en el ícono de **SQL Developer** en la barra izquierda y presionar **`+`** (*Nueva conexión*).
-3. Ingresar las credenciales del contenedor local:
+1. Abrir la carpeta `PROYECTO-FINAL-BASE-DE-DATOS` en **Visual Studio Code**.
+2. Si aparece un aviso abajo a la derecha recomendando instalar extensiones del repositorio, hacer clic en **Instalar**.
+3. Si no aparece el aviso, abrir el panel de **Extensiones** con **`Ctrl + Shift + X`**, buscar **`Oracle SQL Developer for VSCode`** (verificar que el autor sea **Oracle Corporation** y tenga el ícono de un cilindro con un triángulo verde) y hacer clic en **Instalar**.
+   > **Importante:** No instalar la extensión antigua llamada *Oracle Developer Tools*; usar únicamente **Oracle SQL Developer for VSCode**.
+4. Esperar a que termine la instalación y aparezca un **ícono morado de base de datos** en la barra vertical izquierda de VS Code.
+
+---
+
+## 4. Conectar Visual Studio Code a Oracle
+
+1. Hacer clic en el **ícono morado de SQL Developer** en la barra izquierda y presionar **`+`** (*Nueva conexión*).
+2. Ingresar las credenciales del contenedor local:
    * **Nombre de conexión:** `LEHZ_Docker`
    * **Tipo de Conexión:** `Esencial`
    * **Nombre de host:** `localhost`
@@ -46,14 +74,15 @@ Repositorio oficial del Proyecto Final de Base de Datos (UCM). Incluye la arquit
    * **Nombre de servicio:** `FREEPDB1`
    * **Nombre de Usuario:** `LEHZ`
    * **Contraseña:** `Lehz1234` *(marcar Guardar Contraseña)*
-4. Presionar **Probar** y luego **Establecer conexión**.
-5. Desplegar `LEHZ_Docker > Tablas` para verificar que las 17 tablas `LEHZ_` estén creadas.
+3. Presionar **Probar** y luego **Establecer conexión**.
+4. Desplegar `LEHZ_Docker` y abrir la carpeta **Tablas** para verificar que las 17 tablas `LEHZ_` estén creadas.
+5. Al abrir cualquier archivo `.sql`, hacer clic en **Ninguna conexión asociada** (esquina inferior derecha de VS Code) y seleccionar `LEHZ_Docker`.
 
 ---
 
-## 3. Comandos Útiles de Docker
+## 5. Comandos Útiles de Docker
 
-* **Detener Oracle** (para liberar RAM sin borrar tus datos):
+* **Detener Oracle** (para liberar entre 2 y 3 GB de RAM sin borrar tus datos):
   ```powershell
   docker stop oracle-lehz
   ```
@@ -69,10 +98,11 @@ Repositorio oficial del Proyecto Final de Base de Datos (UCM). Incluye la arquit
 
 ---
 
-## 4. Estructura del Repositorio
+## 6. Estructura del Repositorio
 
 ```text
 PROYECTO-FINAL-BASE-DE-DATOS/
+├── .vscode/               # Extensiones recomendadas de VS Code
 ├── app/                   # Capa cliente (interfaz y conexión a Oracle)
 ├── database/              # Scripts Oracle PL/SQL (prefijo LEHZ_)
 │   ├── 01_tablas/         # Drops y creación de tablas base
@@ -85,6 +115,6 @@ PROYECTO-FINAL-BASE-DE-DATOS/
 │   └── 08_datos_prueba/   # Carga de datos reales para demostración
 ├── docs/                  # Diagrama 3FN, presentación PPT y video demo
 ├── CONEXION_REMOTA.md     # Guía de conexión remota vía Tailscale
-├── README.md              # Guía de instalación local con Docker
+├── README.md              # Guía de instalación local con WSL 2 y Docker
 └── docker-compose.yml     # Configuración del contenedor Oracle
 ```
