@@ -1,27 +1,27 @@
 ALTER SESSION SET CURRENT_SCHEMA = LEHZ;
 
 CREATE OR REPLACE PROCEDURE LEHZ_PS_IUD_RUTA(
-    p_opcion      IN VARCHAR2,
-    p_id_ruta     IN OUT NUMBER,
-    p_origen      IN VARCHAR2 DEFAULT NULL,
-    p_destino     IN VARCHAR2 DEFAULT NULL,
-    p_distancia   IN NUMBER DEFAULT NULL,
-    p_tiempo_est  IN VARCHAR2 DEFAULT NULL
+    p_opcion          IN VARCHAR2,
+    p_id_ruta         IN OUT NUMBER,
+    p_horario         IN TIMESTAMP DEFAULT NULL,
+    p_distancia       IN NUMBER DEFAULT NULL,
+    p_horas_est       IN NUMBER DEFAULT NULL,
+    p_minutos_est     IN NUMBER DEFAULT NULL
 ) IS
 BEGIN
     LOCK TABLE LEHZ_RUTA IN ROW EXCLUSIVE MODE;
 
     IF UPPER(p_opcion) = 'I' THEN
         p_id_ruta := LEHZ_SEQ_RUTA.NEXTVAL;
-        INSERT INTO LEHZ_RUTA (ID_RUTA, ORIGEN, DESTINO, DISTANCIA_KM, TIEMPO_ESTIMADO)
-        VALUES (p_id_ruta, UPPER(TRIM(p_origen)), UPPER(TRIM(p_destino)), p_distancia, TRIM(p_tiempo_est));
+        INSERT INTO LEHZ_RUTA (ID_RUTA, HORARIO, DISTANCIA, HORAS_ESTIMADAS, MINUTOS_ESTIMADOS)
+        VALUES (p_id_ruta, p_horario, p_distancia, p_horas_est, p_minutos_est);
 
     ELSIF UPPER(p_opcion) = 'U' THEN
         UPDATE LEHZ_RUTA
-        SET ORIGEN = UPPER(TRIM(p_origen)),
-            DESTINO = UPPER(TRIM(p_destino)),
-            DISTANCIA_KM = p_distancia,
-            TIEMPO_ESTIMADO = TRIM(p_tiempo_est)
+        SET HORARIO = p_horario,
+            DISTANCIA = p_distancia,
+            HORAS_ESTIMADAS = p_horas_est,
+            MINUTOS_ESTIMADOS = p_minutos_est
         WHERE ID_RUTA = p_id_ruta;
 
         IF SQL%ROWCOUNT = 0 THEN
@@ -50,7 +50,7 @@ CREATE OR REPLACE PROCEDURE LEHZ_PS_LISTAR_RUTAS(
 ) IS
 BEGIN
     OPEN p_cursor FOR
-        SELECT ID_RUTA, ORIGEN, DESTINO, DISTANCIA_KM, TIEMPO_ESTIMADO
+        SELECT ID_RUTA, HORARIO, DISTANCIA, HORAS_ESTIMADAS, MINUTOS_ESTIMADOS
         FROM LEHZ_RUTA
         ORDER BY ID_RUTA ASC;
 END LEHZ_PS_LISTAR_RUTAS;
