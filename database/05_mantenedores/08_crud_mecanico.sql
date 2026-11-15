@@ -1,0 +1,60 @@
+ALTER SESSION SET CURRENT_SCHEMA = LEHZ;
+
+CREATE OR REPLACE PROCEDURE LEHZ_PS_IUD_MECANICO(
+    p_opcion      IN VARCHAR2,
+    p_rut         IN NUMBER,
+    p_nombre      IN VARCHAR2 DEFAULT NULL,
+    p_apellido    IN VARCHAR2 DEFAULT NULL,
+    p_especialidad IN VARCHAR2 DEFAULT NULL,
+    p_rut_empresa IN NUMBER DEFAULT NULL
+) IS
+BEGIN
+    LOCK TABLE LEHZ_MECANICO IN ROW EXCLUSIVE MODE;
+
+    IF UPPER(p_opcion) = 'I' THEN
+        INSERT INTO LEHZ_MECANICO (RUT_MECANICO, NOMBRE, APELLIDO, ESPECIALIDAD, RUT_EMPRESA)
+        VALUES (p_rut, INITCAP(TRIM(p_nombre)), INITCAP(TRIM(p_apellido)), INITCAP(TRIM(p_especialidad)), p_rut_empresa);
+
+    ELSIF UPPER(p_opcion) = 'U' THEN
+        UPDATE LEHZ_MECANICO
+        SET NOMBRE = INITCAP(TRIM(p_nombre)),
+            APELLIDO = INITCAP(TRIM(p_apellido)),
+            ESPECIALIDAD = INITCAP(TRIM(p_especialidad)),
+            RUT_EMPRESA = p_rut_empresa
+        WHERE RUT_MECANICO = p_rut;
+
+        IF SQL%ROWCOUNT = 0 THEN
+            RAISE_APPLICATION_ERROR(-20071, 'No se encontro el mecanico a actualizar.');
+        END IF;
+
+    ELSIF UPPER(p_opcion) = 'D' THEN
+        DELETE FROM LEHZ_MECANICO
+        WHERE RUT_MECANICO = p_rut;
+
+        IF SQL%ROWCOUNT = 0 THEN
+            RAISE_APPLICATION_ERROR(-20072, 'No se encontro el mecanico a eliminar.');
+        END IF;
+    END IF;
+
+    COMMIT;
+EXCEPTION
+    WHEN DUP_VAL_ON_INDEX THEN
+        ROLLBACK;
+        RAISE_APPLICATION_ERROR(-20070, 'Ya existe un mecanico registrado con ese RUT.');
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE;
+END LEHZ_PS_IUD_MECANICO;
+/
+
+CREATE OR REPLACE PROCEDURE LEHZ_PS_LISTAR_MECANICOS(
+    p_cursor OUT SYS_REFCURSOR
+) IS
+BEGIN
+    OPEN p_cursor FOR
+        SELECT m.RUT_MECANICO, m.NOMBRE, m.APELLIDO, m.ESPECIALIDAD, m.RUT_EMPRESA, e.RAZON_SOCIAL AS NOMBRE_EMPRESA
+        FROM LEHZ_MECANICO m
+        INNER JOIN LEHZ_EMPRESA e ON m.RUT_EMPRESA = e.RUT_EMPRESA
+        ORDER BY m.APELLIDO ASC;
+END LEHZ_PS_LISTAR_MECANICOS;
+/

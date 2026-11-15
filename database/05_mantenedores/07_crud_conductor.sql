@@ -1,0 +1,60 @@
+ALTER SESSION SET CURRENT_SCHEMA = LEHZ;
+
+CREATE OR REPLACE PROCEDURE LEHZ_PS_IUD_CONDUCTOR(
+    p_opcion      IN VARCHAR2,
+    p_rut         IN NUMBER,
+    p_nombre      IN VARCHAR2 DEFAULT NULL,
+    p_apellido    IN VARCHAR2 DEFAULT NULL,
+    p_telefono    IN NUMBER DEFAULT NULL,
+    p_rut_empresa IN NUMBER DEFAULT NULL
+) IS
+BEGIN
+    LOCK TABLE LEHZ_CONDUCTOR IN ROW EXCLUSIVE MODE;
+
+    IF UPPER(p_opcion) = 'I' THEN
+        INSERT INTO LEHZ_CONDUCTOR (RUT_CONDUCTOR, NOMBRE, APELLIDO, TELEFONO_CONDUCTOR, RUT_EMPRESA)
+        VALUES (p_rut, INITCAP(TRIM(p_nombre)), INITCAP(TRIM(p_apellido)), p_telefono, p_rut_empresa);
+
+    ELSIF UPPER(p_opcion) = 'U' THEN
+        UPDATE LEHZ_CONDUCTOR
+        SET NOMBRE = INITCAP(TRIM(p_nombre)),
+            APELLIDO = INITCAP(TRIM(p_apellido)),
+            TELEFONO_CONDUCTOR = p_telefono,
+            RUT_EMPRESA = p_rut_empresa
+        WHERE RUT_CONDUCTOR = p_rut;
+
+        IF SQL%ROWCOUNT = 0 THEN
+            RAISE_APPLICATION_ERROR(-20061, 'No se encontro el conductor a actualizar.');
+        END IF;
+
+    ELSIF UPPER(p_opcion) = 'D' THEN
+        DELETE FROM LEHZ_CONDUCTOR
+        WHERE RUT_CONDUCTOR = p_rut;
+
+        IF SQL%ROWCOUNT = 0 THEN
+            RAISE_APPLICATION_ERROR(-20062, 'No se encontro el conductor a eliminar.');
+        END IF;
+    END IF;
+
+    COMMIT;
+EXCEPTION
+    WHEN DUP_VAL_ON_INDEX THEN
+        ROLLBACK;
+        RAISE_APPLICATION_ERROR(-20060, 'Ya existe un conductor registrado con ese RUT.');
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE;
+END LEHZ_PS_IUD_CONDUCTOR;
+/
+
+CREATE OR REPLACE PROCEDURE LEHZ_PS_LISTAR_CONDUCTORES(
+    p_cursor OUT SYS_REFCURSOR
+) IS
+BEGIN
+    OPEN p_cursor FOR
+        SELECT c.RUT_CONDUCTOR, c.NOMBRE, c.APELLIDO, c.TELEFONO_CONDUCTOR, c.RUT_EMPRESA, e.RAZON_SOCIAL AS NOMBRE_EMPRESA
+        FROM LEHZ_CONDUCTOR c
+        INNER JOIN LEHZ_EMPRESA e ON c.RUT_EMPRESA = e.RUT_EMPRESA
+        ORDER BY c.APELLIDO ASC;
+END LEHZ_PS_LISTAR_CONDUCTORES;
+/
