@@ -1,0 +1,1 @@
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){const m=document.getElementById('recordModal');if(m)m.classList.remove('show')}});document.addEventListener('click',e=>{const m=document.getElementById('recordModal');if(m&&e.target===m)m.classList.remove('show')});

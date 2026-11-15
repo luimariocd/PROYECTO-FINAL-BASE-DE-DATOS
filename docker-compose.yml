@@ -7,10 +7,26 @@ services:
     environment:
       ORACLE_PASSWORD: Admin1234
       APP_USER: LEHZ
-      APP_USER_PASSWORD:  Lehz1234
+      APP_USER_PASSWORD: Lehz1234
     volumes:
       - oracle_data:/opt/oracle/oradata
       - ./database/01_tablas/02_create_tables.sql:/container-entrypoint-initdb.d/01_create_tables.sql:ro
+
+  web:
+    build: .
+    container_name: lehz-web
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/var/www/html
+    environment:
+      - DB_HOST=oracle-db
+      - DB_PORT=1521
+      - DB_SERVICE=FREEPDB1
+      - DB_USER=LEHZ
+      - DB_PASSWORD=Lehz1234
+    depends_on:
+      - oracle-db
 
 volumes:
   oracle_data:
