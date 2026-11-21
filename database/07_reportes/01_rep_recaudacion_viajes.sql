@@ -5,25 +5,16 @@ CREATE OR REPLACE PROCEDURE LEHZ_PS_REP_RECAUDACION_VIAJES(
 ) IS
 BEGIN
     OPEN p_cursor FOR
-        SELECT q.ID_VIAJE,
-               q.FECHA_VIAJE,
-               LEHZ_FN_DETALLE_RUTA(q.ID_RUTA) AS TRAYECTO,
-               q.DISTANCIA,
-               q.TOTAL_BOLETOS_VENDIDOS,
-               q.RECAUDACION_TOTAL
-        FROM (
-            SELECT v.ID_VIAJE,
-                   TO_CHAR(v.FECHA_VIAJE, 'YYYY-MM-DD') AS FECHA_VIAJE,
-                   r.ID_RUTA,
-                   r.DISTANCIA,
-                   COUNT(b.ID_BOLETO) AS TOTAL_BOLETOS_VENDIDOS,
-                   NVL(SUM(p.MONTO_PAGO), 0) AS RECAUDACION_TOTAL
-            FROM LEHZ_VIAJE v
-            INNER JOIN LEHZ_RUTA r ON v.ID_RUTA = r.ID_RUTA
-            LEFT JOIN LEHZ_BOLETO b ON v.ID_VIAJE = b.ID_VIAJE
-            LEFT JOIN LEHZ_PAGO p ON b.ID_BOLETO = p.ID_BOLETO
-            GROUP BY v.ID_VIAJE, v.FECHA_VIAJE, r.ID_RUTA, r.DISTANCIA
-        ) q
-        ORDER BY q.FECHA_VIAJE DESC, q.ID_VIAJE DESC;
+        SELECT v.ID_VIAJE,
+               v.FECHA_VIAJE,
+               'Ruta ID: ' || r.ID_RUTA || ' (Distancia: ' || r.DISTANCIA || 'km)' AS TRAYECTO_DETALLE,
+               COUNT(b.ID_BOLETO) AS TOTAL_BOLETOS_VENDIDOS,
+               NVL(SUM(p.MONTO_PAGO), 0) AS RECAUDACION_TOTAL
+        FROM LEHZ_VIAJE v
+        INNER JOIN LEHZ_RUTA r ON v.ID_RUTA = r.ID_RUTA
+        LEFT JOIN LEHZ_BOLETO b ON v.ID_VIAJE = b.ID_VIAJE
+        LEFT JOIN LEHZ_PAGO p ON b.ID_BOLETO = p.ID_BOLETO
+        GROUP BY v.ID_VIAJE, v.FECHA_VIAJE, r.ID_RUTA, r.DISTANCIA
+        ORDER BY v.FECHA_VIAJE DESC;
 END LEHZ_PS_REP_RECAUDACION_VIAJES;
 /
