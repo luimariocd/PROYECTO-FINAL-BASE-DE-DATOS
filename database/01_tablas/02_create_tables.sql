@@ -1,5 +1,6 @@
 ALTER SESSION SET CURRENT_SCHEMA = LEHZ;
 
+
 -- =========================================================================
 -- MODELO RELACIONAL - SISTEMA DE TRANSPORTE REGIONAL
 -- RUT y telefonos se almacenan normalizados como texto.
