@@ -999,8 +999,8 @@ if ($page === 'dashboard') {
 
     function openCreate() {
         const form = document.getElementById('recordForm');
-        form.reset();
         unlockAll();
+        form.reset();
         document.getElementById('formOp').value = 'I';
         document.getElementById('recordId').value = '';
         document.getElementById('modalTitle').textContent = 'Nuevo registro';
@@ -1011,8 +1011,8 @@ if ($page === 'dashboard') {
 
     function editRow(r) {
         const form = document.getElementById('recordForm');
-        form.reset();
         unlockAll();
+        form.reset();
 
         document.getElementById('formOp').value = 'U';
         document.getElementById('recordId').value = r[formFields[0]] ?? '';

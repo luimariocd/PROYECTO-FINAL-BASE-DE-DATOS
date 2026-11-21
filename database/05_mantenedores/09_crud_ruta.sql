@@ -7,20 +7,34 @@ ALTER SESSION SET CURRENT_SCHEMA = LEHZ;
 CREATE OR REPLACE FUNCTION LEHZ_FN_DETALLE_RUTA(p_id_ruta IN NUMBER) RETURN VARCHAR2 IS
     v_detalle VARCHAR2(4000);
 BEGIN
-    SELECT LISTAGG(c.NOMBRE_COMUNA, ' -> ') WITHIN GROUP (ORDER BY p.ORDEN)
+    -- El origen siempre va primero y el destino siempre va al final.
+    -- Las paradas intermedias se ordenan por ORDEN. Si una parada coincide
+    -- con el origen o el destino, se omite para no duplicar la ciudad.
+    SELECT LISTAGG(t.NOMBRE_COMUNA, ' -> ')
+               WITHIN GROUP (ORDER BY t.ORDEN, t.NOMBRE_COMUNA)
     INTO v_detalle
-    FROM LEHZ_RUTA_PARADA p
-    INNER JOIN LEHZ_COMUNA c ON c.ID_COMUNA = p.ID_COMUNA
-    WHERE p.ID_RUTA = p_id_ruta;
-
-    IF v_detalle IS NULL THEN
-        SELECT co.NOMBRE_COMUNA || ' -> ' || cd.NOMBRE_COMUNA
-        INTO v_detalle
+    FROM (
+        SELECT co.NOMBRE_COMUNA AS NOMBRE_COMUNA, 0 AS ORDEN
         FROM LEHZ_RUTA r
         INNER JOIN LEHZ_COMUNA co ON co.ID_COMUNA = r.ID_COMUNA_ORIGEN
+        WHERE r.ID_RUTA = p_id_ruta
+
+        UNION ALL
+
+        SELECT c.NOMBRE_COMUNA, p.ORDEN
+        FROM LEHZ_RUTA_PARADA p
+        INNER JOIN LEHZ_COMUNA c ON c.ID_COMUNA = p.ID_COMUNA
+        INNER JOIN LEHZ_RUTA r ON r.ID_RUTA = p.ID_RUTA
+        WHERE p.ID_RUTA = p_id_ruta
+          AND p.ID_COMUNA NOT IN (r.ID_COMUNA_ORIGEN, r.ID_COMUNA_DESTINO)
+
+        UNION ALL
+
+        SELECT cd.NOMBRE_COMUNA, 1000000
+        FROM LEHZ_RUTA r
         INNER JOIN LEHZ_COMUNA cd ON cd.ID_COMUNA = r.ID_COMUNA_DESTINO
-        WHERE r.ID_RUTA = p_id_ruta;
-    END IF;
+        WHERE r.ID_RUTA = p_id_ruta
+    ) t;
 
     RETURN v_detalle;
 EXCEPTION
