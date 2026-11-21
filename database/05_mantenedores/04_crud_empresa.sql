@@ -2,9 +2,11 @@ ALTER SESSION SET CURRENT_SCHEMA = LEHZ;
 
 CREATE OR REPLACE PROCEDURE LEHZ_PS_IUD_EMPRESA(
     p_opcion       IN VARCHAR2,
-    p_rut_empresa  IN NUMBER,
+    -- ==================== [MODIFICADO] RUT y Telefono a VARCHAR2 ====================
+    p_rut_empresa  IN VARCHAR2,
     p_razon_social IN VARCHAR2 DEFAULT NULL,
-    p_telefono     IN NUMBER DEFAULT NULL,
+    p_telefono     IN VARCHAR2 DEFAULT NULL,
+    -- ================================================================================
     p_correo       IN VARCHAR2 DEFAULT NULL
 ) IS
 BEGIN
@@ -12,14 +14,16 @@ BEGIN
 
     IF UPPER(p_opcion) = 'I' THEN
         INSERT INTO LEHZ_EMPRESA (RUT_EMPRESA, RAZON_SOCIAL, TELEFONO_EMPRESA, CORREO_ELECTRONICO_EMPRESA)
-        VALUES (p_rut_empresa, UPPER(TRIM(p_razon_social)), p_telefono, LOWER(TRIM(p_correo)));
+        VALUES (TRIM(p_rut_empresa), TRIM(p_razon_social), TRIM(p_telefono), LOWER(TRIM(p_correo)));
 
     ELSIF UPPER(p_opcion) = 'U' THEN
         UPDATE LEHZ_EMPRESA
-        SET RAZON_SOCIAL = UPPER(TRIM(p_razon_social)),
-            TELEFONO_EMPRESA = p_telefono,
+        SET RAZON_SOCIAL = TRIM(p_razon_social),
+            TELEFONO_EMPRESA = TRIM(p_telefono),
             CORREO_ELECTRONICO_EMPRESA = LOWER(TRIM(p_correo))
-        WHERE RUT_EMPRESA = p_rut_empresa;
+        -- ==================== [MODIFICADO] Comparacion normalizada de RUT ====================
+        WHERE RUT_EMPRESA = UPPER(REGEXP_REPLACE(TRIM(p_rut_empresa), '\.', ''));
+        -- =====================================================================================
 
         IF SQL%ROWCOUNT = 0 THEN
             RAISE_APPLICATION_ERROR(-20031, 'No se encontro la empresa a actualizar.');
@@ -27,7 +31,9 @@ BEGIN
 
     ELSIF UPPER(p_opcion) = 'D' THEN
         DELETE FROM LEHZ_EMPRESA
-        WHERE RUT_EMPRESA = p_rut_empresa;
+        -- ==================== [MODIFICADO] Comparacion normalizada de RUT ====================
+        WHERE RUT_EMPRESA = UPPER(REGEXP_REPLACE(TRIM(p_rut_empresa), '\.', ''));
+        -- =====================================================================================
 
         IF SQL%ROWCOUNT = 0 THEN
             RAISE_APPLICATION_ERROR(-20032, 'No se encontro la empresa a eliminar.');

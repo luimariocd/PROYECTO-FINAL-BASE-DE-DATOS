@@ -73,3 +73,17 @@ CREATE SEQUENCE LEHZ_SEQ_AUDITORIA
     INCREMENT BY 1
     NOCACHE
     NOCYCLE;
+
+-- ==================== [NUEVO] SECUENCIAS DE PARADAS Y BAJADAS ====================
+CREATE SEQUENCE LEHZ_SEQ_RUTA_PARADA 
+    START WITH 1 
+    INCREMENT BY 1 
+    NOCACHE 
+    NOCYCLE;
+    
+CREATE SEQUENCE LEHZ_SEQ_PASAJE_BAJADA 
+    START WITH 1 
+    INCREMENT BY 1 
+    NOCACHE 
+    NOCYCLE;
+-- =================================================================================

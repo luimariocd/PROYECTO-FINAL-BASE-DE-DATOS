@@ -7,14 +7,16 @@ CREATE OR REPLACE PROCEDURE LEHZ_PS_IUD_BUS(
     p_modelo      IN VARCHAR2 DEFAULT NULL,
     p_anio        IN NUMBER DEFAULT NULL,
     p_capacidad   IN NUMBER DEFAULT NULL,
-    p_rut_empresa IN NUMBER DEFAULT NULL
+    -- ==================== [MODIFICADO] RUT_EMPRESA a VARCHAR2 ====================
+    p_rut_empresa IN VARCHAR2 DEFAULT NULL
+    -- =============================================================================
 ) IS
 BEGIN
     LOCK TABLE LEHZ_BUS IN ROW EXCLUSIVE MODE;
 
     IF UPPER(p_opcion) = 'I' THEN
         INSERT INTO LEHZ_BUS (PATENTE_BUS, MARCA, MODELO, AÑO_FABRICACION, CAPACIDAD, RUT_EMPRESA)
-        VALUES (UPPER(TRIM(p_patente)), INITCAP(TRIM(p_marca)), INITCAP(TRIM(p_modelo)), p_anio, p_capacidad, p_rut_empresa);
+        VALUES (UPPER(TRIM(p_patente)), INITCAP(TRIM(p_marca)), INITCAP(TRIM(p_modelo)), p_anio, p_capacidad, UPPER(REGEXP_REPLACE(TRIM(p_rut_empresa), '\.', '')));
 
     ELSIF UPPER(p_opcion) = 'U' THEN
         UPDATE LEHZ_BUS
@@ -22,7 +24,7 @@ BEGIN
             MODELO = INITCAP(TRIM(p_modelo)),
             AÑO_FABRICACION = p_anio,
             CAPACIDAD = p_capacidad,
-            RUT_EMPRESA = p_rut_empresa
+            RUT_EMPRESA = UPPER(REGEXP_REPLACE(TRIM(p_rut_empresa), '\.', ''))
         WHERE PATENTE_BUS = UPPER(TRIM(p_patente));
 
         IF SQL%ROWCOUNT = 0 THEN

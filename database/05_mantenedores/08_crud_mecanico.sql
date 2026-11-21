@@ -1,29 +1,33 @@
 ALTER SESSION SET CURRENT_SCHEMA = LEHZ;
 
 CREATE OR REPLACE PROCEDURE LEHZ_PS_IUD_MECANICO(
-    p_opcion      IN VARCHAR2,
-    p_rut         IN NUMBER,
-    p_nombre      IN VARCHAR2 DEFAULT NULL,
-    p_apellido1   IN VARCHAR2 DEFAULT NULL,
-    p_apellido2   IN VARCHAR2 DEFAULT NULL,
+    p_opcion       IN VARCHAR2,
+    -- ==================== [MODIFICADO] RUT VARCHAR2 y nuevo TELEFONO ====================
+    p_rut          IN VARCHAR2,
+    p_nombre       IN VARCHAR2 DEFAULT NULL,
+    p_apellido1    IN VARCHAR2 DEFAULT NULL,
+    p_apellido2    IN VARCHAR2 DEFAULT NULL,
+    p_telefono     IN VARCHAR2 DEFAULT NULL,
     p_especialidad IN VARCHAR2 DEFAULT NULL,
-    p_rut_empresa IN NUMBER DEFAULT NULL
+    p_rut_empresa  IN VARCHAR2 DEFAULT NULL
+    -- ====================================================================================
 ) IS
 BEGIN
     LOCK TABLE LEHZ_MECANICO IN ROW EXCLUSIVE MODE;
 
     IF UPPER(p_opcion) = 'I' THEN
-        INSERT INTO LEHZ_MECANICO (RUT_MECANICO, NOMBRE_MECANICO, APELLIDO1_MECANICO, APELLIDO2_MECANICO, ESPECIALIDAD, RUT_EMPRESA)
-        VALUES (p_rut, INITCAP(TRIM(p_nombre)), INITCAP(TRIM(p_apellido1)), INITCAP(TRIM(p_apellido2)), INITCAP(TRIM(p_especialidad)), p_rut_empresa);
+        INSERT INTO LEHZ_MECANICO (RUT_MECANICO, NOMBRE_MECANICO, APELLIDO1_MECANICO, APELLIDO2_MECANICO, TELEFONO, ESPECIALIDAD, RUT_EMPRESA)
+        VALUES (TRIM(p_rut), TRIM(p_nombre), TRIM(p_apellido1), TRIM(p_apellido2), TRIM(p_telefono), TRIM(p_especialidad), UPPER(REGEXP_REPLACE(TRIM(p_rut_empresa), '\.', '')));
 
     ELSIF UPPER(p_opcion) = 'U' THEN
         UPDATE LEHZ_MECANICO
-        SET NOMBRE_MECANICO = INITCAP(TRIM(p_nombre)),
-            APELLIDO1_MECANICO = INITCAP(TRIM(p_apellido1)),
-            APELLIDO2_MECANICO = INITCAP(TRIM(p_apellido2)),
-            ESPECIALIDAD = INITCAP(TRIM(p_especialidad)),
-            RUT_EMPRESA = p_rut_empresa
-        WHERE RUT_MECANICO = p_rut;
+        SET NOMBRE_MECANICO = TRIM(p_nombre),
+            APELLIDO1_MECANICO = TRIM(p_apellido1),
+            APELLIDO2_MECANICO = TRIM(p_apellido2),
+            TELEFONO = TRIM(p_telefono),
+            ESPECIALIDAD = TRIM(p_especialidad),
+            RUT_EMPRESA = UPPER(REGEXP_REPLACE(TRIM(p_rut_empresa), '\.', ''))
+        WHERE RUT_MECANICO = UPPER(REGEXP_REPLACE(TRIM(p_rut), '\.', ''));
 
         IF SQL%ROWCOUNT = 0 THEN
             RAISE_APPLICATION_ERROR(-20071, 'No se encontro el mecanico a actualizar.');
@@ -31,7 +35,7 @@ BEGIN
 
     ELSIF UPPER(p_opcion) = 'D' THEN
         DELETE FROM LEHZ_MECANICO
-        WHERE RUT_MECANICO = p_rut;
+        WHERE RUT_MECANICO = UPPER(REGEXP_REPLACE(TRIM(p_rut), '\.', ''));
 
         IF SQL%ROWCOUNT = 0 THEN
             RAISE_APPLICATION_ERROR(-20072, 'No se encontro el mecanico a eliminar.');
@@ -54,7 +58,9 @@ CREATE OR REPLACE PROCEDURE LEHZ_PS_LISTAR_MECANICOS(
 ) IS
 BEGIN
     OPEN p_cursor FOR
-        SELECT m.RUT_MECANICO, m.NOMBRE_MECANICO, m.APELLIDO1_MECANICO, m.APELLIDO2_MECANICO, m.ESPECIALIDAD, m.RUT_EMPRESA, e.RAZON_SOCIAL AS NOMBRE_EMPRESA
+        -- ==================== [MODIFICADO] Se incluye m.TELEFONO ====================
+        SELECT m.RUT_MECANICO, m.NOMBRE_MECANICO, m.APELLIDO1_MECANICO, m.APELLIDO2_MECANICO, m.TELEFONO, m.ESPECIALIDAD, m.RUT_EMPRESA, e.RAZON_SOCIAL AS NOMBRE_EMPRESA
+        -- ============================================================================
         FROM LEHZ_MECANICO m
         INNER JOIN LEHZ_EMPRESA e ON m.RUT_EMPRESA = e.RUT_EMPRESA
         ORDER BY m.APELLIDO1_MECANICO ASC;

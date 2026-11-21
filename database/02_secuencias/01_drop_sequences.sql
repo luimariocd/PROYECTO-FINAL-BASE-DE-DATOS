@@ -15,3 +15,8 @@ DROP SEQUENCE LEHZ_SEQ_PAGO;
 DROP SEQUENCE LEHZ_SEQ_ROL;
 DROP SEQUENCE LEHZ_SEQ_USUARIO;
 DROP SEQUENCE LEHZ_SEQ_AUDITORIA;
+
+-- ==================== [NUEVO] SECUENCIAS DE PARADAS Y BAJADAS ====================
+DROP SEQUENCE LEHZ_SEQ_RUTA_PARADA;
+DROP SEQUENCE LEHZ_SEQ_PASAJE_BAJADA;
+-- =================================================================================

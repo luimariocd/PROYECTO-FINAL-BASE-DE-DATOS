@@ -79,6 +79,19 @@ VALUES (
     3
 );
 
+-- ==================== [NUEVO] USUARIO ADMINISTRADOR DENUNCE ====================
+INSERT INTO LEHZ_USUARIO (ID_USUARIO, USERNAME, PASSWORD_HASH, NOMBRE_COMPLETO, EMAIL, ESTADO, ID_ROL)
+VALUES (
+    LEHZ_SEQ_USUARIO.NEXTVAL,
+    'denunce',
+    RAWTOHEX(STANDARD_HASH('Mario1234', 'SHA256')),
+    'Administrador Denunce',
+    'denunce@transporteucm.cl',
+    'ACTIVO',
+    1
+);
+-- ===============================================================================
+
 COMMIT;
 
 -- CONTROL DE ACCESO
@@ -210,3 +223,92 @@ CREATE OR REPLACE PACKAGE BODY LEHZ_PKG_SEGURIDAD AS
 
 END LEHZ_PKG_SEGURIDAD;
 /
+
+-- ==================== [NUEVO] POLITICA DE CONTRASEÑA ROBUSTA Y PRIVILEGIOS =======
+CREATE OR REPLACE FUNCTION LEHZ_FN_VALIDAR_PASSWORD (
+    p_password IN VARCHAR2
+) RETURN VARCHAR2 IS
+BEGIN
+    IF p_password IS NULL OR LENGTH(p_password) < 8 OR LENGTH(p_password) > 16 THEN
+        RETURN 'La contraseña debe tener entre 8 y 16 caracteres.';
+    END IF;
+    IF NOT REGEXP_LIKE(p_password, '[A-Z]') THEN
+        RETURN 'La contraseña debe incluir al menos una letra mayúscula.';
+    END IF;
+    IF NOT REGEXP_LIKE(p_password, '[a-z]') THEN
+        RETURN 'La contraseña debe incluir al menos una letra minúscula.';
+    END IF;
+    IF NOT REGEXP_LIKE(p_password, '[0-9]') THEN
+        RETURN 'La contraseña debe incluir al menos un número.';
+    END IF;
+    IF NOT REGEXP_LIKE(p_password, '[^A-Za-z0-9]') THEN
+        RETURN 'La contraseña debe incluir al menos un carácter especial (ej: @, #, $, %, !, .).';
+    END IF;
+    RETURN 'OK';
+END;
+/
+
+CREATE OR REPLACE PROCEDURE LEHZ_PS_CREAR_USUARIO_SEGURO (
+    p_username        IN  VARCHAR2,
+    p_password        IN  VARCHAR2,
+    p_nombre_completo IN  VARCHAR2,
+    p_email           IN  VARCHAR2,
+    p_rol_solicitado  IN  VARCHAR2,
+    p_rol_ejecutor    IN  VARCHAR2,
+    p_estado          OUT VARCHAR2,
+    p_mensaje         OUT VARCHAR2
+) IS
+    v_val_pass  VARCHAR2(200);
+    v_id_rol    NUMBER;
+    v_rol_final VARCHAR2(30);
+BEGIN
+    v_val_pass := LEHZ_FN_VALIDAR_PASSWORD(p_password);
+    IF v_val_pass <> 'OK' THEN
+        p_estado  := 'ADVERTENCIA';
+        p_mensaje := v_val_pass;
+        RETURN;
+    END IF;
+
+    -- Solo un ADMINISTRADOR puede crear cuentas con privilegios superiores
+    IF UPPER(NVL(p_rol_ejecutor, 'PUBLICO')) <> 'ADMINISTRADOR' THEN
+        v_rol_final := 'VENDEDOR';
+    ELSE
+        v_rol_final := UPPER(TRIM(p_rol_solicitado));
+    END IF;
+
+    SELECT ID_ROL INTO v_id_rol
+    FROM LEHZ_ROL
+    WHERE NOMBRE_ROL = v_rol_final;
+
+    INSERT INTO LEHZ_USUARIO (
+        ID_USUARIO, USERNAME, PASSWORD_HASH, NOMBRE_COMPLETO, EMAIL, ESTADO, ID_ROL
+    ) VALUES (
+        LEHZ_SEQ_USUARIO.NEXTVAL,
+        LOWER(TRIM(p_username)),
+        RAWTOHEX(STANDARD_HASH(p_password, 'SHA256')),
+        INITCAP(TRIM(p_nombre_completo)),
+        LOWER(TRIM(p_email)),
+        'ACTIVO',
+        v_id_rol
+    );
+
+    COMMIT;
+    p_estado  := 'OK';
+    p_mensaje := 'Usuario ' || LOWER(TRIM(p_username)) || ' creado correctamente con rol ' || v_rol_final || '.';
+
+EXCEPTION
+    WHEN DUP_VAL_ON_INDEX THEN
+        ROLLBACK;
+        p_estado  := 'ADVERTENCIA';
+        p_mensaje := 'El nombre de usuario "' || p_username || '" ya existe. Elige otro para continuar.';
+    WHEN NO_DATA_FOUND THEN
+        ROLLBACK;
+        p_estado  := 'ADVERTENCIA';
+        p_mensaje := 'El rol solicitado no existe.';
+    WHEN OTHERS THEN
+        ROLLBACK;
+        p_estado  := 'ERROR';
+        p_mensaje := 'No se pudo registrar el usuario: ' || SQLERRM;
+END;
+/
+-- =================================================================================
