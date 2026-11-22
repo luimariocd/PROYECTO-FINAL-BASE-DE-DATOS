@@ -1,13 +1,12 @@
 ALTER SESSION SET CURRENT_SCHEMA = LEHZ;
 
--- 1. Regiones y Comunas de Chile
--- Formato de carga equivalente a 01_seed_datos.sql.
+-- Regiones de Chile
 -- Ejecutar en una base vacía, con las secuencias comenzando en 1.
 -- Reemplaza los INSERT de regiones y comunas del seed original; no ejecutes ambos bloques.
 -- Las primeras regiones son Maule (ID 1) y Metropolitana (ID 2).
 -- Las primeras comunas son Talca (ID 1), Curicó (ID 2) y Santiago (ID 3).
 
--- 1.1 Regiones
+--Regiones
 INSERT INTO LEHZ_REGION (ID_REGION, NOMBRE_REGION) VALUES (LEHZ_SEQ_REGION.NEXTVAL, 'Región del Maule');
 INSERT INTO LEHZ_REGION (ID_REGION, NOMBRE_REGION) VALUES (LEHZ_SEQ_REGION.NEXTVAL, 'Región Metropolitana');
 INSERT INTO LEHZ_REGION (ID_REGION, NOMBRE_REGION) VALUES (LEHZ_SEQ_REGION.NEXTVAL, 'Región de Arica y Parinacota');
