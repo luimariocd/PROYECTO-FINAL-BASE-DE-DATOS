@@ -200,3 +200,136 @@
         filterParadas();
     });
 })();
+
+    function filterSelect(input) {
+        var target = document.getElementById(input.getAttribute('data-filter'));
+        if (!target) return;
+        if (!target._originalHTML) target._originalHTML = target.innerHTML;
+        var q = input.value.trim().toLowerCase();
+        if (q === '') {
+            target.innerHTML = target._originalHTML;
+            return;
+        }
+        var current = target.value;
+        var parser = new DOMParser();
+        var doc = parser.parseFromString('<select>' + target._originalHTML + '</select>', 'text/html');
+        var orig = doc.querySelector('select');
+        var html = '<option value="">Seleccione...</option>';
+        Array.prototype.forEach.call(orig.querySelectorAll('optgroup'), function (group) {
+            var opts = '';
+            Array.prototype.forEach.call(group.querySelectorAll('option'), function (opt) {
+                if (opt.textContent.toLowerCase().indexOf(q) !== -1) {
+                    var o = opt.outerHTML;
+                    if (opt.value === current) o = o.replace('<option', '<option selected');
+                    opts += o;
+                }
+            });
+            if (opts) {
+                html += '<optgroup label="' + group.getAttribute('label') + '">' + opts + '</optgroup>';
+            }
+        });
+        Array.prototype.forEach.call(orig.querySelectorAll(':scope > option'), function (opt) {
+            if (!opt.value) return;
+            if (opt.textContent.toLowerCase().indexOf(q) !== -1) {
+                var o = opt.outerHTML;
+                if (opt.value === current) o = o.replace('<option', '<option selected');
+                html += o;
+            }
+        });
+        target.innerHTML = html;
+    }
+
+    document.addEventListener('input', function (event) {
+        if (event.target.classList && event.target.classList.contains('filter-input')) {
+            filterSelect(event.target);
+        }
+    });
+
+    (function acInit() {
+        function setupAC(fieldName) {
+            var hidden = document.getElementById('field_' + fieldName);
+            var input = document.getElementById('ac_' + fieldName);
+            var dd = document.getElementById('acdd_' + fieldName);
+            if (!hidden || !input || !dd) return;
+            var opts = (window.LEHZ_AC && window.LEHZ_AC[fieldName]) || [];
+            function render(q) {
+                q = (q || '').trim().toLowerCase();
+                var groups = {};
+                var order = [];
+                opts.forEach(function (o) {
+                    if (q === '' || (o.label || o.value).toLowerCase().indexOf(q) !== -1) {
+                        var g = o.group || '';
+                        if (!groups[g]) { groups[g] = []; order.push(g); }
+                        groups[g].push(o);
+                    }
+                });
+                var html = '';
+                order.forEach(function (g) {
+                    if (g) html += '<div class="ac-group">' + g + '</div>';
+                    groups[g].forEach(function (o) {
+                        html += '<div class="ac-option" data-value="' + String(o.value).replace(/"/g, '&quot;') + '">' + o.label + '</div>';
+                    });
+                });
+                if (!html) html = '<div class="ac-empty">Sin resultados</div>';
+                dd.innerHTML = html;
+                dd.style.display = 'block';
+            }
+            input.addEventListener('focus', function () { render(input.value); });
+            input.addEventListener('click', function () { render(input.value); });
+            input.addEventListener('input', function () { render(input.value); });
+            dd.addEventListener('mousedown', function (e) {
+                var opt = e.target.closest('.ac-option');
+                if (!opt) return;
+                e.preventDefault();
+                hidden.value = opt.getAttribute('data-value');
+                input.value = opt.textContent;
+                dd.style.display = 'none';
+            });
+            document.addEventListener('click', function (e) {
+                if (e.target !== input && !dd.contains(e.target)) dd.style.display = 'none';
+            });
+        }
+        document.addEventListener('DOMContentLoaded', function () {
+            if (window.LEHZ_AC) {
+                Object.keys(window.LEHZ_AC).forEach(setupAC);
+            }
+        });
+    })();
+
+    function syncPhone(fieldName) {
+        var hidden = document.getElementById('field_' + fieldName);
+        var numInput = document.getElementById('num_' + fieldName);
+        var prefixSel = document.querySelector('.phone-prefix[data-target="field_' + fieldName + '"]');
+        if (!hidden || !numInput || !prefixSel) return;
+        var num = numInput.value.trim().replace(/^\+?56\s*9?\s*/, '').replace(/^600\s*/, '').replace(/^809\s*/, '').trim();
+        hidden.value = num ? (prefixSel.value + ' ' + num) : '';
+    }
+
+    document.addEventListener('input', function (event) {
+        if (event.target.id && event.target.id.indexOf('num_') === 0) {
+            syncPhone(event.target.id.replace('num_', ''));
+        }
+    });
+
+    document.addEventListener('change', function (event) {
+        if (event.target.classList && event.target.classList.contains('phone-prefix')) {
+            syncPhone(event.target.getAttribute('data-target').replace('field_', ''));
+        }
+    });
+
+    document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('.phone-prefix').forEach(function (sel) {
+            syncPhone(sel.getAttribute('data-target').replace('field_', ''));
+        });
+    });
+
+    (function sidebarScroll() {
+        var sb = document.querySelector('.sidebar');
+        if (!sb) return;
+        var key = 'sidebarScroll';
+        var saved = sessionStorage.getItem(key);
+        if (saved !== null) sb.scrollTop = parseInt(saved, 10) || 0;
+        sb.addEventListener('scroll', function () {
+            sessionStorage.setItem(key, String(sb.scrollTop));
+        });
+    })();

@@ -361,8 +361,8 @@ BEGIN
         p_mensaje := 'El nombre completo es obligatorio.';
         RETURN;
     END IF;
-    IF p_email IS NOT NULL AND TRIM(p_email) <> ''
-       AND NOT REGEXP_LIKE(TRIM(p_email), '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$') THEN
+    IF p_email IS NOT NULL
+       AND NOT REGEXP_LIKE(TRIM(p_email), '^[^@]+@[^@]+\.[^@]{2,}$') THEN
         p_estado  := 'ADVERTENCIA';
         p_mensaje := 'El correo electronico no tiene un formato valido (ej. usuario@dominio.cl).';
         RETURN;

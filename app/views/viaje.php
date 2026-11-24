@@ -10,7 +10,7 @@ $viajes = db_rows('LEHZ_PS_LISTAR_VIAJES');
     <form method="post" class="form-grid">
         <input type="hidden" name="action" value="viaje">
         <label>Fecha del viaje
-            <input type="date" name="fecha_viaje" required value="<?= h(old_value('fecha_viaje')) ?>">
+            <input type="date" name="fecha_viaje" required min="<?= date('Y-m-d') ?>" value="<?= h(old_value('fecha_viaje')) ?>">
         </label>
         <label>Horario
             <select name="id_horario" required>

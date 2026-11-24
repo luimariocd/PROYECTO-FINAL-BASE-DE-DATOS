@@ -21,10 +21,10 @@ CREATE OR REPLACE PROCEDURE LEHZ_PS_IUD_CONDUCTOR(
 BEGIN
     LOCK TABLE LEHZ_CONDUCTOR IN ROW EXCLUSIVE MODE;
     v_rut      := LEHZ_FN_NORMALIZAR_RUT(p_rut, 'PERSONA');
-    v_rut_emp  := LEHZ_FN_NORMALIZAR_RUT(p_rut_empresa, 'EMPRESA');
-    v_telefono := LEHZ_FN_VALIDAR_TEL_CL(p_telefono, 'PERSONA');
 
     IF UPPER(TRIM(p_opcion)) IN ('I', 'U') THEN
+        v_rut_emp  := LEHZ_FN_NORMALIZAR_RUT(p_rut_empresa, 'EMPRESA');
+        v_telefono := LEHZ_FN_VALIDAR_TEL_CL(p_telefono, 'PERSONA');
         IF p_nombre IS NULL OR TRIM(p_nombre) = '' THEN
             RAISE_APPLICATION_ERROR(-20060, 'El nombre del conductor es obligatorio.');
         END IF;

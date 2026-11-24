@@ -18,18 +18,18 @@ CREATE OR REPLACE PROCEDURE LEHZ_PS_IUD_PASAJERO(
 BEGIN
     LOCK TABLE LEHZ_PASAJERO IN ROW EXCLUSIVE MODE;
     v_rut      := LEHZ_FN_NORMALIZAR_RUT(p_rut, 'PERSONA');
-    v_telefono := LEHZ_FN_VALIDAR_TEL_CL(p_telefono, 'PERSONA');
-    v_correo   := LOWER(TRIM(p_correo));
 
     IF UPPER(TRIM(p_opcion)) IN ('I', 'U') THEN
+        v_telefono := LEHZ_FN_VALIDAR_TEL_CL(p_telefono, 'PERSONA');
+        v_correo   := LOWER(TRIM(p_correo));
         IF p_nombre IS NULL OR TRIM(p_nombre) = '' THEN
             RAISE_APPLICATION_ERROR(-20160, 'El nombre del pasajero es obligatorio.');
         END IF;
         IF p_apellido1 IS NULL OR TRIM(p_apellido1) = '' THEN
             RAISE_APPLICATION_ERROR(-20160, 'El primer apellido del pasajero es obligatorio.');
         END IF;
-        IF v_correo IS NOT NULL AND v_correo <> ''
-           AND NOT REGEXP_LIKE(v_correo, '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$') THEN
+        IF v_correo IS NOT NULL
+           AND NOT REGEXP_LIKE(v_correo, '^[^@]+@[^@]+\.[^@]{2,}$') THEN
             RAISE_APPLICATION_ERROR(-20160, 'El correo electronico del pasajero no tiene un formato valido (ej. usuario@dominio.cl).');
         END IF;
     END IF;

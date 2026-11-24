@@ -15,12 +15,22 @@ CREATE OR REPLACE PROCEDURE LEHZ_PS_IUD_EMPRESA(
 BEGIN
     LOCK TABLE LEHZ_EMPRESA IN ROW EXCLUSIVE MODE;
     v_rut      := LEHZ_FN_NORMALIZAR_RUT(p_rut_empresa, 'EMPRESA');
-    v_telefono := LEHZ_FN_VALIDAR_TEL_CL(p_telefono, 'EMPRESA');
 
-    IF UPPER(TRIM(p_opcion)) = 'I' THEN
+    IF UPPER(TRIM(p_opcion)) IN ('I', 'U') THEN
+        v_telefono := LEHZ_FN_VALIDAR_TEL_CL(p_telefono, 'EMPRESA');
+    END IF;
+
+    IF UPPER(TRIM(p_opcion)) IN ('I', 'U') THEN
         IF p_razon_social IS NULL OR TRIM(p_razon_social) = '' THEN
             RAISE_APPLICATION_ERROR(-20030, 'La razon social de la empresa es obligatoria.');
         END IF;
+        IF p_correo IS NOT NULL
+           AND NOT REGEXP_LIKE(LOWER(TRIM(p_correo)), '^[^@]+@[^@]+\.[^@]{2,}$') THEN
+            RAISE_APPLICATION_ERROR(-20030, 'El correo electronico de la empresa no tiene un formato valido.');
+        END IF;
+    END IF;
+
+    IF UPPER(TRIM(p_opcion)) = 'I' THEN
         INSERT INTO LEHZ_EMPRESA (RUT_EMPRESA, RAZON_SOCIAL, TELEFONO_EMPRESA, CORREO_ELECTRONICO_EMPRESA)
         VALUES (v_rut, LEHZ_FN_NORMALIZAR_TEXTO(p_razon_social), v_telefono, LOWER(TRIM(p_correo)));
 

@@ -15,3 +15,12 @@
 .report-summary strong{display:block;font:700 20px Manrope;margin-top:6px}
 td.actions{white-space:nowrap}
 @media print{.login-tabs,.toggle-pass{display:none!important}}
+.ac-input{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px;font:400 13px "DM Sans"}
+.ac-dropdown{position:relative;z-index:20;max-height:220px;overflow:auto;border:1px solid var(--line);border-radius:8px;background:#fff;box-shadow:0 8px 20px rgba(0,0,0,.08);display:none;margin-top:4px}
+.ac-group{padding:6px 10px;font:700 10px "DM Sans";color:#8a94a6;background:#f6f8fb;text-transform:uppercase;letter-spacing:.6px}
+.ac-option{padding:8px 10px;cursor:pointer;font:400 13px "DM Sans"}
+.ac-option:hover{background:#eef3fb}
+.ac-empty{padding:10px;color:#9aa3b2;font:400 12px "DM Sans"}
+.phone-row{display:flex;gap:8px;align-items:center}
+.phone-row select{width:90px}
+.phone-row input{flex:1}

@@ -10,7 +10,7 @@ $mantenciones = db_rows('LEHZ_PS_LISTAR_MANTENCIONES');
     <form method="post" class="form-grid">
         <input type="hidden" name="action" value="mantencion">
         <label>Fecha
-            <input type="date" name="fecha" required value="<?= h(old_value('fecha')) ?>">
+            <input type="date" name="fecha" required min="<?= date('Y-m-d') ?>" value="<?= h(old_value('fecha')) ?>">
         </label>
         <label>Costo
             <input type="number" name="costo" min="0" step="1" required value="<?= h(old_value('costo')) ?>">
