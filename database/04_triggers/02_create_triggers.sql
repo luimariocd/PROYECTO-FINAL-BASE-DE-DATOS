@@ -20,7 +20,7 @@ BEGIN
         v_detalle   := 'Se elimino el bus con patente: ' || :OLD.PATENTE_BUS;
     END IF;
 
-    -- Inserta en la bitácora de auditoría usando la secuencia
+    -- Inserta en la bitacora de auditoria usando la secuencia
     INSERT INTO LEHZ_AUDITORIA (
         ID_AUDITORIA, TABLA_AFECTADA, OPERACION, ID_REGISTRO, DETALLE, USUARIO_BD, FECHA_EVENTO
     ) VALUES (
@@ -70,12 +70,34 @@ END;
 /
 
 CREATE OR REPLACE TRIGGER LEHZ_TRG_VALIDAR_FECHA_MANTENCION
-BEFORE INSERT OR UPDATE 
+BEFORE INSERT OR UPDATE
 ON LEHZ_MANTENCION
 FOR EACH ROW
+DECLARE
+    v_asignaciones NUMBER := 0;
 BEGIN
-    IF :NEW.FECHA_MANTENCION > SYSDATE THEN
-        RAISE_APPLICATION_ERROR(-20010, 'Error de negocio: La fecha de la mantencion no puede ser mayor a la fecha actual.');
+    IF :NEW.FECHA_MANTENCION IS NULL THEN
+        RAISE_APPLICATION_ERROR(-20213, 'La fecha de la mantencion es obligatoria.');
+    END IF;
+    IF TRUNC(:NEW.FECHA_MANTENCION) > TRUNC(SYSDATE) THEN
+        RAISE_APPLICATION_ERROR(-20213, 'La fecha de la mantencion no puede ser mayor a la fecha actual.');
+    END IF;
+    IF :NEW.DESCRIPCION_MANTENCION IS NULL OR TRIM(:NEW.DESCRIPCION_MANTENCION) = '' THEN
+        RAISE_APPLICATION_ERROR(-20213, 'La descripcion de la mantencion es obligatoria.');
+    END IF;
+    IF :NEW.COSTO_MANTENCION IS NULL OR :NEW.COSTO_MANTENCION < 0 THEN
+        RAISE_APPLICATION_ERROR(-20213, 'El costo de la mantencion debe ser mayor o igual a cero.');
+    END IF;
+
+    SELECT COUNT(*)
+      INTO v_asignaciones
+      FROM LEHZ_CONDUCE c
+      INNER JOIN LEHZ_VIAJE v ON v.ID_VIAJE = c.ID_VIAJE
+     WHERE c.PATENTE_BUS = :NEW.PATENTE_BUS
+       AND TRUNC(v.FECHA_VIAJE) = TRUNC(:NEW.FECHA_MANTENCION);
+
+    IF v_asignaciones > 0 THEN
+        RAISE_APPLICATION_ERROR(-20213, 'No se puede registrar la mantencion: el bus esta asignado a un viaje en esa fecha.');
     END IF;
 END;
 /

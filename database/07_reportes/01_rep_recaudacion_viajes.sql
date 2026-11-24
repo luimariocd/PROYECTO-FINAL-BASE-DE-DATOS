@@ -1,20 +1,29 @@
 ALTER SESSION SET CURRENT_SCHEMA = LEHZ;
 
+-- ============================================================================
+-- REPORTE 01: RECAUDACION POR VIAJE (EXCLUYE BOLETOS ANULADOS)
+-- ============================================================================
 CREATE OR REPLACE PROCEDURE LEHZ_PS_REP_RECAUDACION_VIAJES(
     p_cursor OUT SYS_REFCURSOR
 ) IS
 BEGIN
     OPEN p_cursor FOR
         SELECT v.ID_VIAJE,
-               v.FECHA_VIAJE,
-               'Ruta ID: ' || r.ID_RUTA || ' (Distancia: ' || r.DISTANCIA || 'km)' AS TRAYECTO_DETALLE,
-               COUNT(b.ID_BOLETO) AS TOTAL_BOLETOS_VENDIDOS,
+               TO_CHAR(v.FECHA_VIAJE, 'DD/MM/YYYY') AS FECHA_VIAJE,
+               r.NOMBRE_RUTA,
+               o.NOMBRE AS TERMINAL_ORIGEN,
+               d.NOMBRE AS TERMINAL_DESTINO,
+               COUNT(DISTINCT b.ID_BOLETO) AS TOTAL_BOLETOS_VENDIDOS,
                NVL(SUM(p.MONTO_PAGO), 0) AS RECAUDACION_TOTAL
-        FROM LEHZ_VIAJE v
-        INNER JOIN LEHZ_RUTA r ON v.ID_RUTA = r.ID_RUTA
-        LEFT JOIN LEHZ_BOLETO b ON v.ID_VIAJE = b.ID_VIAJE
-        LEFT JOIN LEHZ_PAGO p ON b.ID_BOLETO = p.ID_BOLETO
-        GROUP BY v.ID_VIAJE, v.FECHA_VIAJE, r.ID_RUTA, r.DISTANCIA
-        ORDER BY v.FECHA_VIAJE DESC;
+          FROM LEHZ_VIAJE v
+          INNER JOIN LEHZ_RUTA r ON r.ID_RUTA = v.ID_RUTA
+          INNER JOIN LEHZ_TERMINAL o ON o.ID_TERMINAL = r.ID_TERMINAL_ORIGEN
+          INNER JOIN LEHZ_TERMINAL d ON d.ID_TERMINAL = r.ID_TERMINAL_DESTINO
+          LEFT JOIN LEHZ_BOLETO b
+                 ON b.ID_VIAJE = v.ID_VIAJE
+                AND b.ESTADO <> 'ANULADO'
+          LEFT JOIN LEHZ_PAGO p ON p.ID_BOLETO = b.ID_BOLETO
+         GROUP BY v.ID_VIAJE, v.FECHA_VIAJE, r.NOMBRE_RUTA, o.NOMBRE, d.NOMBRE
+         ORDER BY v.FECHA_VIAJE DESC, v.ID_VIAJE DESC;
 END LEHZ_PS_REP_RECAUDACION_VIAJES;
 /

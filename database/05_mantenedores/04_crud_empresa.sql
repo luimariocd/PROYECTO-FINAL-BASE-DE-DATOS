@@ -1,43 +1,51 @@
 ALTER SESSION SET CURRENT_SCHEMA = LEHZ;
 
+-- ============================================================================
+-- MANTENEDOR 04: EMPRESAS
+-- ============================================================================
 CREATE OR REPLACE PROCEDURE LEHZ_PS_IUD_EMPRESA(
     p_opcion       IN VARCHAR2,
-    -- ==================== [MODIFICADO] RUT y Telefono a VARCHAR2 ====================
     p_rut_empresa  IN VARCHAR2,
     p_razon_social IN VARCHAR2 DEFAULT NULL,
     p_telefono     IN VARCHAR2 DEFAULT NULL,
-    -- ================================================================================
     p_correo       IN VARCHAR2 DEFAULT NULL
 ) IS
+    v_rut      VARCHAR2(12);
+    v_telefono VARCHAR2(20);
 BEGIN
     LOCK TABLE LEHZ_EMPRESA IN ROW EXCLUSIVE MODE;
+    v_rut      := LEHZ_FN_NORMALIZAR_RUT(p_rut_empresa, 'EMPRESA');
+    v_telefono := LEHZ_FN_VALIDAR_TEL_CL(p_telefono, 'EMPRESA');
 
-    IF UPPER(p_opcion) = 'I' THEN
+    IF UPPER(TRIM(p_opcion)) = 'I' THEN
+        IF p_razon_social IS NULL OR TRIM(p_razon_social) = '' THEN
+            RAISE_APPLICATION_ERROR(-20030, 'La razon social de la empresa es obligatoria.');
+        END IF;
         INSERT INTO LEHZ_EMPRESA (RUT_EMPRESA, RAZON_SOCIAL, TELEFONO_EMPRESA, CORREO_ELECTRONICO_EMPRESA)
-        VALUES (TRIM(p_rut_empresa), TRIM(p_razon_social), TRIM(p_telefono), LOWER(TRIM(p_correo)));
+        VALUES (v_rut, LEHZ_FN_NORMALIZAR_TEXTO(p_razon_social), v_telefono, LOWER(TRIM(p_correo)));
 
-    ELSIF UPPER(p_opcion) = 'U' THEN
+    ELSIF UPPER(TRIM(p_opcion)) = 'U' THEN
+        IF p_razon_social IS NULL OR TRIM(p_razon_social) = '' THEN
+            RAISE_APPLICATION_ERROR(-20030, 'La razon social de la empresa es obligatoria.');
+        END IF;
         UPDATE LEHZ_EMPRESA
-        SET RAZON_SOCIAL = TRIM(p_razon_social),
-            TELEFONO_EMPRESA = TRIM(p_telefono),
-            CORREO_ELECTRONICO_EMPRESA = LOWER(TRIM(p_correo))
-        -- ==================== [MODIFICADO] Comparacion normalizada de RUT ====================
-        WHERE RUT_EMPRESA = UPPER(REGEXP_REPLACE(TRIM(p_rut_empresa), '\.', ''));
-        -- =====================================================================================
+           SET RAZON_SOCIAL = LEHZ_FN_NORMALIZAR_TEXTO(p_razon_social),
+               TELEFONO_EMPRESA = v_telefono,
+               CORREO_ELECTRONICO_EMPRESA = LOWER(TRIM(p_correo))
+         WHERE RUT_EMPRESA = v_rut;
 
         IF SQL%ROWCOUNT = 0 THEN
             RAISE_APPLICATION_ERROR(-20031, 'No se encontro la empresa a actualizar.');
         END IF;
 
-    ELSIF UPPER(p_opcion) = 'D' THEN
-        DELETE FROM LEHZ_EMPRESA
-        -- ==================== [MODIFICADO] Comparacion normalizada de RUT ====================
-        WHERE RUT_EMPRESA = UPPER(REGEXP_REPLACE(TRIM(p_rut_empresa), '\.', ''));
-        -- =====================================================================================
-
+    ELSIF UPPER(TRIM(p_opcion)) = 'D' THEN
+        DELETE FROM LEHZ_EMPRESA WHERE RUT_EMPRESA = v_rut;
         IF SQL%ROWCOUNT = 0 THEN
             RAISE_APPLICATION_ERROR(-20032, 'No se encontro la empresa a eliminar.');
         END IF;
+
+    ELSE
+        RAISE_APPLICATION_ERROR(-20030, 'Operacion invalida. Use I, U o D.');
     END IF;
 
     COMMIT;
@@ -47,6 +55,9 @@ EXCEPTION
         RAISE_APPLICATION_ERROR(-20030, 'Ya existe una empresa registrada con ese RUT.');
     WHEN OTHERS THEN
         ROLLBACK;
+        IF SQLCODE = -2292 THEN
+            RAISE_APPLICATION_ERROR(-20032, 'No se puede eliminar la empresa: tiene buses, conductores, mecanicos o terminales asociados.');
+        END IF;
         RAISE;
 END LEHZ_PS_IUD_EMPRESA;
 /
