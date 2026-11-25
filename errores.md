@@ -3,7 +3,11 @@
 Proyecto: Sistema LEHZ – Transporte Regional  
 Rama base: `Denunce`  
 Esquema de validacion: `LEHZTEST` (sin destruir `LEHZ`)  
+<<<<<<< HEAD
 Fecha de cierre de pruebas: 25/11/2026
+=======
+Fecha de cierre de pruebas: 24/11/2026
+>>>>>>> 05e766dd077aefce9c75935cc0164f80ed0eb28f
 
 ## Leyenda de estado
 - **Corregido**: causa raiz corregida y verificada en Oracle/PHP.
@@ -62,6 +66,7 @@ Fecha de cierre de pruebas: 25/11/2026
 | 35 | `lehz-web` montaba `PROYECTO-FINAL-BASE-DE-DATOS`, no el directorio de trabajo. | Ruta de bind distinta. | Se sincronizaron archivos con `robocopy`. | Corregido |
 | 36 | `oracle-lehz` se detuvo durante las pruebas. | Contenedor apagado. | Se reinicio y se reinstalo `LEHZTEST`. | Corregido |
 
+<<<<<<< HEAD
 ## 4. Migracion de interfaz a AdminLTE 4 / Bootstrap 5
 
 | # | Hallazgo | Causa raiz | Correccion aplicada | Estado |
@@ -86,6 +91,8 @@ Fecha de cierre de pruebas: 25/11/2026
 | 49 | El reporte de costos de mantencion no detectaba fechas ni categoria. | Las columnas se llamaban `ULTIMA_MANTENCION` y `RAZON_SOCIAL`. | Deteccion de fechas por contenido y de categoria por `NOMBRE/RAZON/RUTA/PATENTE`. | Corregido |
 | 50 | La portada del panel era un bloque plano. | `bg-gradient` generico de Bootstrap. | Hero con gradiente propio y detalle decorativo, mas `page-kicker` en el encabezado. | Corregido |
 
+=======
+>>>>>>> 05e766dd077aefce9c75935cc0164f80ed0eb28f
 ## Pendientes no bloqueantes
 - Los scripts SQL usan `ALTER SESSION SET CURRENT_SCHEMA = LEHZ;` en su version original; en `LEHZTEST` se ejecutan con el usuario de prueba. No afecta la entrega.
 - El `docker-compose.yml` inicializa solo tablas en una instalacion nueva; la carga completa requiere ejecutar 01→08 manualmente (documentado en README).
@@ -93,6 +100,7 @@ Fecha de cierre de pruebas: 25/11/2026
 
 ## Verificacion final
 - Instalacion 01→08 en `LEHZTEST`: `FAILED_COUNT=0`.
+<<<<<<< HEAD
 - Pruebas Oracle: 47 verificaciones, todas `PASS` (suite original; la base no se modifico en la fase de interfaz).
 - Comprobaciones puntuales repetidas: telefonos `+56 9` / `600` / `809` normalizados por Oracle; `t@hh` rechazado con `ORA-20030` y `@outlook.com` aceptado; horario 23:00→01:00 almacenado como dia siguiente.
 - Vistas web probadas: login (incluye registro), dashboard, 12 mantenedores, venta, bajada, viaje, conduce, mantencion, utilizan, usuarios, 4 reportes (24 paginas en total).
@@ -102,3 +110,8 @@ Fecha de cierre de pruebas: 25/11/2026
 - Graficos verificados: recaudacion por dia (`$148.400` en 4 dias), distribucion por ruta y boletos vendidos por dia; costos de mantencion tambien generan linea y circular.
 - Las 24 paginas se reverificaron tras la mejora visual: sin errores PHP/ORA ni errores de consola.
 - Sincronizacion de `app/` con `C:\Users\behemoth\Documents\PROYECTO-FINAL-BASE-DE-DATOS\app` completada; `lehz-web` sirve la version migrada y mejorada.
+=======
+- Pruebas Oracle: 47 verificaciones, todas `PASS`.
+- Vistas web probadas: login, dashboard, 12 mantenedores, venta, bajada, viaje, conduce, mantencion, utilizan, usuarios, 4 reportes.
+- Operaciones CRUD y gestores probados exitosamente en `http://localhost:8000` contra `LEHZTEST`.
+>>>>>>> 05e766dd077aefce9c75935cc0164f80ed0eb28f

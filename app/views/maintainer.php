@@ -63,6 +63,7 @@ if ($rows) {
     </div>
 </div>
 
+<<<<<<< HEAD
 <div class="modal fade" id="recordModal" tabindex="-1" aria-labelledby="modalTitle" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
         <form method="post" id="recordForm" class="modal-content">
@@ -77,6 +78,90 @@ if ($rows) {
                 <input type="hidden" name="action" value="maintainer">
                 <input type="hidden" name="module" value="<?= h($key) ?>">
                 <input type="hidden" name="op" id="formOp" value="<?= in_array(old_value('op'), ['I', 'U'], true) ? h(old_value('op')) : 'I' ?>">
+=======
+            <?php foreach ($meta['fields'] as $field): ?>
+                <label><?= h($field['label']) ?>
+                    <?php if (in_array($field['type'], ['select', 'domain'], true)): ?>
+                        <?php if (($field['source'] ?? '') === 'comunas_chile'): ?>
+                            <?php
+                            $comunaOpts = [];
+                            foreach (db_query('SELECT NOMBRE_COMUNA, NOMBRE_REGION FROM LEHZ_VW_COMUNAS_CHILE ORDER BY NOMBRE_REGION, NOMBRE_COMUNA') as $opt) {
+                                $comunaOpts[] = ['value' => $opt['NOMBRE_COMUNA'], 'label' => $opt['NOMBRE_COMUNA'], 'group' => $opt['NOMBRE_REGION']];
+                            }
+                            ?>
+                            <input type="hidden" name="<?= h($field['name']) ?>" id="field_<?= h($field['name']) ?>" value="<?= h(old_value($field['name'])) ?>">
+                            <input type="text" class="ac-input" id="ac_<?= h($field['name']) ?>" placeholder="Buscar comuna..." autocomplete="off" value="<?= h(old_value($field['name'])) ?>">
+                            <div class="ac-dropdown" id="acdd_<?= h($field['name']) ?>"></div>
+                            <script>window.LEHZ_AC = window.LEHZ_AC || {}; window.LEHZ_AC['<?= h($field['name']) ?>'] = <?= json_encode($comunaOpts, JSON_UNESCAPED_UNICODE) ?>;</script>
+                        <?php else: ?>
+                            <?php if (($field['source'] ?? '') === 'regiones_chile'): ?>
+                                <?php
+                                $regionOpts = [];
+                                foreach (field_options($field) as $option) {
+                                    $regionOpts[] = ['value' => $option['value'], 'label' => $option['label']];
+                                }
+                                ?>
+                                <input type="hidden" name="<?= h($field['name']) ?>" id="field_<?= h($field['name']) ?>" value="<?= h(old_value($field['name'])) ?>">
+                                <input type="text" class="ac-input" id="ac_<?= h($field['name']) ?>" placeholder="Buscar region..." autocomplete="off" value="<?= h(old_value($field['name'])) ?>">
+                                <div class="ac-dropdown" id="acdd_<?= h($field['name']) ?>"></div>
+                                <script>window.LEHZ_AC = window.LEHZ_AC || {}; window.LEHZ_AC['<?= h($field['name']) ?>'] = <?= json_encode($regionOpts, JSON_UNESCAPED_UNICODE) ?>;</script>
+                            <?php else: ?>
+                                <select name="<?= h($field['name']) ?>" id="field_<?= h($field['name']) ?>">
+                                    <option value="">Seleccione...</option>
+                                    <?php foreach (field_options($field) as $option): ?>
+                                        <option value="<?= h($option['value']) ?>" <?= (string)old_value($field['name']) === (string)$option['value'] ? 'selected' : '' ?>><?= h($option['label']) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            <?php endif; ?>
+                        <?php endif; ?>
+                    <?php elseif ($field['type'] === 'textarea'): ?>
+                        <textarea name="<?= h($field['name']) ?>" id="field_<?= h($field['name']) ?>" rows="3"><?= h(old_value($field['name'])) ?></textarea>
+                    <?php else: ?>
+                        <?php
+                        if (str_starts_with($field['name'], 'HORA_')) {
+                            $inputType = 'time';
+                        } else {
+                            $inputType = in_array($field['type'], ['number', 'date', 'datetime-local', 'email', 'tel'], true) ? $field['type'] : 'text';
+                        }
+                        $extra = '';
+                        if ($inputType === 'number') {
+                            $extra = ' step="any"';
+                        }
+                        if ($inputType === 'tel') {
+                            $extra .= ' data-phone="1"';
+                        }
+                        if ($inputType === 'date') {
+                            $extra .= ' min="' . date('Y-m-d') . '"';
+                        }
+                        ?>
+                        <?php if ($inputType === 'tel'): ?>
+                            <?php
+                            $pv = (string)old_value($field['name']);
+                            $prefix = '+56 9';
+                            $num = $pv;
+                            if (strpos($pv, '+56 9') === 0) { $prefix = '+56 9'; $num = trim(substr($pv, 5)); }
+                            elseif (strpos($pv, '600') === 0) { $prefix = '600'; $num = trim(substr($pv, 3)); }
+                            elseif (strpos($pv, '809') === 0) { $prefix = '809'; $num = trim(substr($pv, 3)); }
+                            elseif (strpos($pv, '+56') === 0) { $prefix = '+56 9'; $num = trim(substr($pv, 4)); }
+                            ?>
+                            <span class="phone-row">
+                                <select class="phone-prefix" data-target="field_<?= h($field['name']) ?>">
+                                    <option value="+56 9" <?= $prefix === '+56 9' ? 'selected' : '' ?>>+56 9</option>
+                                    <option value="600" <?= $prefix === '600' ? 'selected' : '' ?>>600</option>
+                                    <option value="809" <?= $prefix === '809' ? 'selected' : '' ?>>809</option>
+                                </select>
+                                <input type="tel" id="num_<?= h($field['name']) ?>" placeholder="" value="<?= h($num) ?>" data-phone-number="1" required>
+                                <input type="hidden" name="<?= h($field['name']) ?>" id="field_<?= h($field['name']) ?>" value="<?= h($pv) ?>">
+                            </span>
+                        <?php else: ?>
+                            <input type="<?= h($inputType) ?>" name="<?= h($field['name']) ?>" id="field_<?= h($field['name']) ?>"
+                                   placeholder="<?= h($field['placeholder'] ?? '') ?>"<?= $extra ?>
+                                   value="<?= h(old_value($field['name'])) ?>">
+                        <?php endif; ?>
+                    <?php endif; ?>
+                </label>
+            <?php endforeach; ?>
+>>>>>>> 05e766dd077aefce9c75935cc0164f80ed0eb28f
 
                 <div class="row g-3">
                     <?php foreach ($meta['id'] as $id): ?>

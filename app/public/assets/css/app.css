@@ -15,6 +15,7 @@
     --app-shadow: 0 .6rem 1.8rem rgba(20, 43, 82, .07);
 }
 
+<<<<<<< HEAD
 [data-bs-theme="dark"] {
     --app-page-bg: #0b111b;
     --app-surface: #151f2e;
@@ -333,3 +334,26 @@ body {
     body { background: #fff; }
     .card { border: 0; box-shadow: none; }
 }
+=======
+/* Ajustes de interfaz agregados para formularios y tablas */
+.login-tabs{display:flex;gap:8px;margin-bottom:18px;border-bottom:1px solid var(--line);padding-bottom:12px}
+.login-tabs a{padding:8px 12px;border-radius:7px;font-size:12px;font-weight:600;color:#7a879b}
+.login-tabs a.active{background:#edf3ff;color:#2d5bc4}
+.password-field{position:relative;display:block}
+.password-field input{padding-right:78px}
+.toggle-pass{position:absolute;right:8px;top:50%;transform:translateY(-50%);border:0;background:#eef3fb;color:#3869d8;border-radius:6px;padding:6px 9px;font:600 10px 'DM Sans';cursor:pointer}
+.toggle-pass:hover{background:#dfe9fb}
+.badge{display:inline-block;padding:4px 8px;border-radius:20px;background:#eef3fb;color:#3d5f9e;font:700 10px 'DM Sans';letter-spacing:.4px}
+.report-summary strong{display:block;font:700 20px Manrope;margin-top:6px}
+td.actions{white-space:nowrap}
+@media print{.login-tabs,.toggle-pass{display:none!important}}
+.ac-input{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px;font:400 13px "DM Sans"}
+.ac-dropdown{position:relative;z-index:20;max-height:220px;overflow:auto;border:1px solid var(--line);border-radius:8px;background:#fff;box-shadow:0 8px 20px rgba(0,0,0,.08);display:none;margin-top:4px}
+.ac-group{padding:6px 10px;font:700 10px "DM Sans";color:#8a94a6;background:#f6f8fb;text-transform:uppercase;letter-spacing:.6px}
+.ac-option{padding:8px 10px;cursor:pointer;font:400 13px "DM Sans"}
+.ac-option:hover{background:#eef3fb}
+.ac-empty{padding:10px;color:#9aa3b2;font:400 12px "DM Sans"}
+.phone-row{display:flex;gap:8px;align-items:center}
+.phone-row select{width:90px}
+.phone-row input{flex:1}
+>>>>>>> 05e766dd077aefce9c75935cc0164f80ed0eb28f
