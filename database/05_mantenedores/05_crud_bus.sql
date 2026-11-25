@@ -22,10 +22,10 @@ CREATE OR REPLACE PROCEDURE LEHZ_PS_IUD_BUS(
 BEGIN
     LOCK TABLE LEHZ_BUS IN ROW EXCLUSIVE MODE;
     v_patente := LEHZ_FN_NORMALIZAR_PATENTE(p_patente);
-    v_rut     := LEHZ_FN_NORMALIZAR_RUT(p_rut_empresa, 'EMPRESA');
     v_tipo    := UPPER(TRIM(NVL(p_tipo_servicio, 'NORMAL')));
 
     IF UPPER(TRIM(p_opcion)) IN ('I', 'U') THEN
+        v_rut := LEHZ_FN_NORMALIZAR_RUT(p_rut_empresa, 'EMPRESA');
         IF p_capacidad IS NULL OR p_capacidad <= 0 THEN
             RAISE_APPLICATION_ERROR(-20040, 'La capacidad del bus debe ser mayor que cero.');
         END IF;

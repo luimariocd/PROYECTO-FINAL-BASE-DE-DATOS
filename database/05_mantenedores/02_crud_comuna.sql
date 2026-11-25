@@ -6,11 +6,11 @@ ALTER SESSION SET CURRENT_SCHEMA = LEHZ;
 CREATE OR REPLACE PROCEDURE LEHZ_PS_IUD_COMUNA(
     p_opcion        IN VARCHAR2,
     p_id_comuna     IN OUT NUMBER,
-    p_nombre_comuna IN VARCHAR2 DEFAULT NULL,
-    p_id_region     IN NUMBER DEFAULT NULL
+    p_nombre_comuna IN VARCHAR2 DEFAULT NULL
 ) IS
-    v_nombre VARCHAR2(60);
-    v_count  NUMBER := 0;
+    v_nombre     VARCHAR2(60);
+    v_id_region  NUMBER;
+    v_count      NUMBER := 0;
 BEGIN
     LOCK TABLE LEHZ_COMUNA IN ROW EXCLUSIVE MODE;
     v_nombre := LEHZ_FN_NORMALIZAR_TEXTO(p_nombre_comuna);
@@ -19,19 +19,23 @@ BEGIN
         IF v_nombre IS NULL THEN
             RAISE_APPLICATION_ERROR(-20022, 'El nombre de la comuna es obligatorio.');
         END IF;
-        IF p_id_region IS NULL OR p_id_region <= 0 THEN
-            RAISE_APPLICATION_ERROR(-20022, 'Debe seleccionar una region valida.');
-        END IF;
-        SELECT COUNT(*) INTO v_count FROM LEHZ_REGION WHERE ID_REGION = p_id_region;
-        IF v_count = 0 THEN
-            RAISE_APPLICATION_ERROR(-20022, 'La region seleccionada no existe.');
-        END IF;
+
+        BEGIN
+            SELECT r.ID_REGION
+              INTO v_id_region
+              FROM LEHZ_VW_COMUNAS_CHILE_ALL c
+              JOIN LEHZ_REGION r ON UPPER(r.NOMBRE_REGION) = UPPER(c.NOMBRE_REGION)
+             WHERE UPPER(c.NOMBRE_COMUNA) = UPPER(v_nombre);
+        EXCEPTION
+            WHEN NO_DATA_FOUND THEN
+                RAISE_APPLICATION_ERROR(-20022, 'La comuna seleccionada no existe en el catalogo de Chile o su region no esta cargada.');
+        END;
     END IF;
 
     IF UPPER(TRIM(p_opcion)) = 'I' THEN
         p_id_comuna := LEHZ_SEQ_COMUNA.NEXTVAL;
         INSERT INTO LEHZ_COMUNA (ID_COMUNA, NOMBRE_COMUNA, ID_REGION)
-        VALUES (p_id_comuna, v_nombre, p_id_region);
+        VALUES (p_id_comuna, v_nombre, v_id_region);
 
     ELSIF UPPER(TRIM(p_opcion)) = 'U' THEN
         IF p_id_comuna IS NULL OR p_id_comuna <= 0 THEN
@@ -39,7 +43,7 @@ BEGIN
         END IF;
         UPDATE LEHZ_COMUNA
            SET NOMBRE_COMUNA = v_nombre,
-               ID_REGION = p_id_region
+               ID_REGION = v_id_region
          WHERE ID_COMUNA = p_id_comuna;
 
         IF SQL%ROWCOUNT = 0 THEN

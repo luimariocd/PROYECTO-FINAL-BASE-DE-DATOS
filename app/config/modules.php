@@ -11,7 +11,7 @@ $maintainers = [
         'list'  => 'LEHZ_PS_LISTAR_REGIONES',
         'id'    => [['name' => 'ID_REGION', 'param' => 'p_id_region', 'auto' => true]],
         'fields' => [
-            ['name' => 'NOMBRE_REGION', 'param' => 'p_nombre_region', 'label' => 'Nombre de la region', 'type' => 'text', 'placeholder' => 'Ej. Region del Maule'],
+            ['name' => 'NOMBRE_REGION', 'param' => 'p_nombre_region', 'label' => 'Region de Chile', 'type' => 'select', 'source' => 'regiones_chile'],
         ],
     ],
     'comunas' => [
@@ -20,8 +20,7 @@ $maintainers = [
         'list'  => 'LEHZ_PS_LISTAR_COMUNAS',
         'id'    => [['name' => 'ID_COMUNA', 'param' => 'p_id_comuna', 'auto' => true]],
         'fields' => [
-            ['name' => 'NOMBRE_COMUNA', 'param' => 'p_nombre_comuna', 'label' => 'Nombre de la comuna', 'type' => 'text'],
-            ['name' => 'ID_REGION', 'param' => 'p_id_region', 'label' => 'Region', 'type' => 'select', 'source' => 'regiones'],
+            ['name' => 'NOMBRE_COMUNA', 'param' => 'p_nombre_comuna', 'label' => 'Comuna de Chile', 'type' => 'select', 'source' => 'comunas_chile'],
         ],
     ],
     'terminales' => [
@@ -42,8 +41,8 @@ $maintainers = [
         'list'  => 'LEHZ_PS_LISTAR_EMPRESAS',
         'id'    => [['name' => 'RUT_EMPRESA', 'param' => 'p_rut_empresa', 'label' => 'RUT de la empresa', 'placeholder' => '7 u 8 digitos, con o sin DV']],
         'fields' => [
-            ['name' => 'RAZON_SOCIAL', 'param' => 'p_razon_social', 'label' => 'Razon social', 'type' => 'text'],
-            ['name' => 'TELEFONO_EMPRESA', 'param' => 'p_telefono', 'label' => 'Telefono de la empresa', 'type' => 'tel', 'placeholder' => '+56 2 2345 6789, 600 123 456, 809 123 456'],
+            ['name' => 'RAZON_SOCIAL', 'param' => 'p_razon_social', 'label' => 'Nombre de la empresa', 'type' => 'text'],
+            ['name' => 'TELEFONO_EMPRESA', 'param' => 'p_telefono', 'label' => 'Numero de contacto', 'type' => 'tel', 'placeholder' => '+56 2 2345 6789, 600 123 456, 809 123 456'],
             ['name' => 'CORREO_ELECTRONICO_EMPRESA', 'param' => 'p_correo', 'label' => 'Correo electronico', 'type' => 'email'],
         ],
     ],
@@ -140,6 +139,7 @@ $maintainers = [
         'id'    => [['name' => 'ID_HORARIO', 'param' => 'p_id_horario', 'auto' => true]],
         'fields' => [
             ['name' => 'HORARIO', 'param' => 'p_horario_val', 'label' => 'Codigo de horario', 'type' => 'number'],
+            ['name' => 'FECHA_HORARIO', 'param' => 'p_fecha_horario', 'label' => 'Fecha del horario', 'type' => 'date'],
             ['name' => 'HORA_SALIDA', 'param' => 'p_hora_salida', 'label' => 'Hora de salida', 'type' => 'datetime-local'],
             ['name' => 'HORA_LLEGADA', 'param' => 'p_hora_llegada', 'label' => 'Hora de llegada', 'type' => 'datetime-local'],
         ],
@@ -160,7 +160,9 @@ $maintainers = [
 ];
 
 $lookups = [
-    'regiones'    => ['proc' => 'LEHZ_PS_LISTAR_REGIONES', 'value' => 'ID_REGION', 'label' => ['NOMBRE_REGION']],
+    'regiones'         => ['proc' => 'LEHZ_PS_LISTAR_REGIONES', 'value' => 'ID_REGION', 'label' => ['NOMBRE_REGION']],
+    'regiones_chile'   => ['proc' => 'LEHZ_PS_LISTAR_REGIONES_CHILE', 'value' => 'VALOR', 'label' => ['ETIQUETA']],
+    'comunas_chile'    => ['proc' => 'LEHZ_PS_LISTAR_COMUNAS_CHILE', 'value' => 'VALOR', 'label' => ['ETIQUETA']],
     'comunas'     => ['proc' => 'LEHZ_PS_LISTAR_COMUNAS', 'value' => 'ID_COMUNA', 'label' => ['NOMBRE_COMUNA', 'NOMBRE_REGION']],
     'terminales'  => ['proc' => 'LEHZ_PS_LISTAR_TERMINALES', 'value' => 'ID_TERMINAL', 'label' => ['NOMBRE', 'NOMBRE_COMUNA']],
     'empresas'    => ['proc' => 'LEHZ_PS_LISTAR_EMPRESAS', 'value' => 'RUT_EMPRESA', 'label' => ['RAZON_SOCIAL']],

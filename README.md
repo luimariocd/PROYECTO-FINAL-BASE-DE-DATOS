@@ -2,10 +2,109 @@
 
 Repositorio oficial del Proyecto Final de Base de Datos (UCM). Incluye la arquitectura de base de datos Oracle, objetos PL/SQL, entorno contenedorizado (Oracle + PHP/OCI8), aplicación web y documentación de entrega.
 
+> **Versión actual de la interfaz:** AdminLTE 4 + Bootstrap 5, selector de tema claro/oscuro/automático y gráficos de recaudación. La lógica de negocio sigue estando **solo en Oracle**.
+
+---
+
+## Actualización rápida: venía usando la versión antigua y quiero la nueva en mi Docker
+
+Esta actualización **solo cambia la carpeta `app/`** (interfaz web). **No modifica la base de datos ni los scripts SQL**, así que **no debes borrar volúmenes ni volver a cargar los scripts 01→08** si ya tienes tus datos cargados.
+
+### 1) Guarda primero tu trabajo
+
+```powershell
+git status
+git add .
+git commit -m "WIP antes de actualizar a la interfaz AdminLTE"
+```
+
+Si no quieres hacer commit, guarda tus cambios temporalmente:
+
+```powershell
+git stash
+```
+
+### 2) Trae la versión nueva
+
+**Opción A — si los cambios ya están en GitHub (recomendado):**
+
+```powershell
+git fetch origin
+git checkout Denunce
+git pull origin Denunce
+```
+
+Si quieres conservar tu rama personal, fusiona la rama nueva en ella:
+
+```powershell
+git checkout nombre-de-tu-rama
+git merge origin/Denunce
+```
+
+> Cuando el equipo fusione todo en `main`, reemplaza `Denunce` por `main` en los comandos anteriores.
+
+**Opción B — si todavía no está subido a GitHub:**
+
+Copia desde la copia de la rama `Denunce` estos elementos y reemplaza los tuyos:
+
+```text
+app/                         # carpeta completa (incluye views/, public/assets/ y public/adminlte/)
+errores.md                   # registro de hallazgos
+```
+
+No reemplaces `database/` ni `docker-compose.yml` si tu base ya funciona.
+
+### 3) Comprueba que los archivos nuevos llegaron
+
+```powershell
+Test-Path app\public\adminlte\css\adminlte.min.css
+Test-Path app\public\assets\css\app.css
+Test-Path app\views\report.php
+```
+
+Los tres deben devolver `True`.
+
+### 4) Actualiza el contenedor web
+
+Como `docker-compose.yml` monta el repositorio dentro del contenedor, normalmente basta con reiniciar el servicio web:
+
+```powershell
+docker compose restart web
+```
+
+Si además cambió el `Dockerfile` o el `docker-compose.yml`, reconstruye:
+
+```powershell
+docker compose up -d --build
+```
+
+### 5) Refresca el navegador y valida
+
+1. Abre **http://localhost:8000** *(antes se indicaba 8080; el puerto real del compose es 8000)*.
+2. Haz **Ctrl + F5** (o abre una ventana de incógnito) para evitar caché del CSS/JS antiguo.
+3. Inicia sesión con tu usuario (ej. `admin` / `Admin1234`).
+4. Debes ver: login con escudo y selector de tema, panel con portada degradada y, en **Recaudación por viaje**, gráfico de línea, circular y barras de boletos.
+
+### 6) Si sigues viendo la interfaz antigua
+
+```powershell
+docker compose down
+docker compose up -d --build
+docker exec lehz-web ls /var/www/html/app/public/adminlte
+```
+
+También revisa que Docker Desktop tenga habilitado el *file sharing* de la carpeta del proyecto y que el navegador no esté sirviendo una copia cacheada.
+
+> **No ejecutes `docker compose down -v`** salvo que quieras borrar la base de datos completa.
+
+> **Compañero con laptop de 4 GB:** no instale Docker ni Oracle local. Debe usar `GUIA_LAPTOP_4GB.md` para conectarse al servidor del equipo por Tailscale.
+
+---
+
 ## Requisitos Previos
 
 * **Git** instalado.
-* **Windows 10/11** con virtualización habilitada *(para equipos con 8 GB o 16 GB de RAM; si tu computador tiene 4 GB de RAM, no instales Docker y sigue la guía en `CONEXION_REMOTA.md`)*.
+* **Windows 10/11** con virtualización habilitada *(para equipos con 8 GB o 16 GB de RAM; si tu computador tiene 4 GB de RAM, no instales Docker: sigue **`GUIA_LAPTOP_4GB.md`** y conecta de forma remota al servidor del equipo).*
 * **Visual Studio Code** instalado.
 
 ---
@@ -31,16 +130,19 @@ Docker Desktop necesita el **Subsistema de Windows para Linux (WSL 2)** para eje
 
 ## 2. Clonar el Repositorio y Levantar Docker (Oracle + Aplicación Web PHP)
 
+> **Esta sección es SOLO para el PC servidor con 8 GB o 16 GB de RAM.**  
+> Si tu laptop tiene **4 GB**, no instales Docker ni ejecutes estos comandos: ve directo a **`GUIA_LAPTOP_4GB.md`** y conecta por Tailscale al servidor del equipo.
+
 El archivo `docker-compose.yml` junto con el `Dockerfile` levantan automáticamente dos servicios conectados entre sí:
-* **`oracle-lehz`:** Base de datos Oracle Database Free (`FREEPDB1`) en el puerto `1521`.
-* **Servidor Web PHP 8 + OCI8:** Interfaz web del sistema disponible en `http://localhost:8080` (o el puerto configurado en `docker-compose.yml`).
+* **`oracle-db`** (contenedor `oracle-lehz`): Base de datos Oracle Database Free (`FREEPDB1`) en el puerto `1521`.
+* **`web`** (contenedor `lehz-web`): Servidor PHP 8 + OCI8 con la interfaz en `http://localhost:8000`.
 
 1. Clonar el proyecto y entrar a la carpeta:
    ```powershell
-   git clone [https://github.com/luimariocd/PROYECTO-FINAL-BASE-DE-DATOS.git](https://github.com/luimariocd/PROYECTO-FINAL-BASE-DE-DATOS.git)
+   git clone https://github.com/luimariocd/PROYECTO-FINAL-BASE-DE-DATOS.git
    cd PROYECTO-FINAL-BASE-DE-DATOS
    ```
-   *(Si ya tienes el repositorio clonado, ejecuta `git pull` para traer los últimos cambios).*
+   *(Si ya tienes el repositorio clonado, ejecuta `git fetch origin` y luego `git pull origin Denunce` —o `main` cuando ya esté fusionado— para traer los últimos cambios).*
 
 2. Construir y levantar los contenedores en segundo plano:
    ```powershell
@@ -76,6 +178,10 @@ El archivo `docker-compose.yml` junto con el `Dockerfile` levantan automáticame
    * **Contraseña:** `Lehz1234` *(marcar Guardar Contraseña)*
 4. Presionar **Probar** y luego **Establecer conexión**.
 5. Ejecutar en orden los scripts de la carpeta `database/` asociados a `LEHZ_Docker` (`01_tablas` → `02_secuencias` → `03_seguridad` → `04_triggers` → `05_mantenedores` → `06_gestores` → `07_reportes` → `08_datos_prueba`).
+   * Dentro de `01_tablas`, ejecuta `01_drop_tables.sql`, `02_create_tables.sql` y luego **`03_cat_chile.sql`** (catálogo fijo de 16 regiones y 346 comunas).
+   * Las carpetas `04_triggers`, `05_mantenedores`, `06_gestores`, `07_reportes` y `08_datos_prueba` incluyen sus respectivos `drop/` para poder reinstalar sin errores.
+
+> **Si solo vienes a actualizar la interfaz**, salta este paso: la base de datos no cambió entre la versión antigua y la nueva.
 
 ---
 
@@ -83,8 +189,8 @@ El archivo `docker-compose.yml` junto con el `Dockerfile` levantan automáticame
 
 Una vez levantados los contenedores y cargados los scripts PL/SQL:
 
-1. Abrir el navegador e ingresar a **`http://localhost:8080`** (si el puerto configurado en `docker-compose.yml` es `8000` u `80`, usar ese puerto).
-2. Iniciar sesión con las credenciales creadas en `database/03_seguridad/` (por ejemplo `admin`).
+1. Abrir el navegador e ingresar a **`http://localhost:8000`**.
+2. Iniciar sesión con las credenciales creadas en `database/03_seguridad/` (por ejemplo `admin` / `Admin1234`).
 
 ---
 
@@ -166,18 +272,25 @@ git merge main
 PROYECTO-FINAL-BASE-DE-DATOS/
 ├── .vscode/               # Extensiones recomendadas de VS Code
 ├── app/                   # Capa cliente PHP + OCI8 (interfaz y conexión a Oracle)
+│   ├── public/
+│   │   ├── adminlte/      # Assets de AdminLTE 4 (CSS/JS) — NUEVO en esta versión
+│   │   ├── assets/        # app.css y app.js (tema, gráficos, autocompletado)
+│   │   └── index.php      # Router/controlador
+│   └── views/             # Vistas migradas a AdminLTE/Bootstrap 5
 ├── database/              # Scripts Oracle PL/SQL (prefijo LEHZ_)
-│   ├── 01_tablas/         # Drops y creación de tablas base
+│   ├── 01_tablas/         # Drops, creación de tablas y 03_cat_chile.sql (NUEVO)
 │   ├── 02_secuencias/     # Secuencias para llaves primarias
 │   ├── 03_seguridad/      # Usuarios, roles y autenticación
-│   ├── 04_triggers/       # Disparadores de monitoreo y validación
-│   ├── 05_mantenedores/   # 10 CRUDs con PA, funciones y cursores
-│   ├── 06_gestores/       # 5 módulos transaccionales
-│   ├── 07_reportes/       # 3 consultas estratégicas para dashboards
-│   └── 08_datos_prueba/   # Carga de datos reales para demostración
+│   ├── 04_triggers/       # Disparadores de monitoreo y validación (+ drop/)
+│   ├── 05_mantenedores/   # 10 CRUDs con PA, funciones y cursores (+ drop/)
+│   ├── 06_gestores/       # 5 módulos transaccionales (+ Drop/)
+│   ├── 07_reportes/       # 4 reportes estratégicos (+ Drops/)
+│   └── 08_datos_prueba/   # Carga de datos reales para demostración (+ Drops/)
 ├── docs/                  # Diagrama 3FN, presentación PPT y video demo
-├── CONEXION_REMOTA.md     # Guía de conexión remota vía Tailscale
+├── CONEXION_REMOTA.md     # Guía de conexión remota vía Tailscale (web + Oracle)
+├── GUIA_LAPTOP_4GB.md     # Guía para laptop de 4 GB: usar el sistema sin Docker local
 ├── Dockerfile             # Construcción del contenedor PHP 8 + extensión OCI8
 ├── docker-compose.yml     # Orquestación de contenedores (Oracle + Web PHP)
-└── README.md              # Guía de instalación, despliegue y flujo Git
+├── errores.md             # Registro de hallazgos y estado de pruebas (NUEVO)
+└── README.md              # Guía de instalación, actualización y flujo Git
 ```

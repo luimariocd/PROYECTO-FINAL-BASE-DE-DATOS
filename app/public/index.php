@@ -48,7 +48,20 @@ function handle_maintainer(array $meta): string {
         $args[] = $id['param'] . ' => :' . $id['param'];
     }
 
+    if ($meta['title'] === 'Horarios' && in_array($op, ['I', 'U'], true)) {
+        $fecha = trim((string)($_POST['FECHA_HORARIO'] ?? ''));
+        foreach (['HORA_SALIDA', 'HORA_LLEGADA'] as $hf) {
+            $hora = trim((string)($_POST[$hf] ?? ''));
+            if ($fecha !== '' && $hora !== '') {
+                $_POST[$hf] = $fecha . 'T' . $hora;
+            }
+        }
+    }
+
     foreach ($meta['fields'] as $field) {
+        if ($field['name'] === 'FECHA_HORARIO') {
+            continue;
+        }
         $binds[$field['param']] = clean_input($field['type'], $_POST[$field['name']] ?? null);
         $args[] = $field['param'] . ' => ' . bind_expression($field['param'], $field['type'], $field['domain'] ?? '');
     }

@@ -13,119 +13,208 @@ if ($rows) {
     $columns = $visible ?? $columns;
 }
 ?>
-<section class="panel">
-    <div class="panel-head">
+<div class="card mb-4">
+    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
         <div>
-            <span class="eyebrow">GESTION DE DATOS</span>
-            <h3><?= h($meta['title']) ?></h3>
-            <p>Las altas, cambios y bajas se ejecutan con el procedimiento <?= h($meta['proc']) ?>.</p>
+            <h3 class="card-title mb-0"><?= h($meta['title']) ?></h3>
+            <div class="text-body-secondary small mt-1">
+                Las altas, cambios y bajas se ejecutan con el procedimiento <?= h($meta['proc']) ?>.
+            </div>
         </div>
-        <button class="btn primary" type="button" onclick="openCreate()">+ Nuevo registro</button>
+        <button class="btn btn-primary" type="button" onclick="openCreate()">
+            <i class="bi bi-plus-lg me-1"></i>Nuevo registro
+        </button>
     </div>
-    <div class="table-wrap">
-        <table>
-            <thead>
-                <tr>
-                    <?php foreach ($columns as $col): ?><th><?= h(column_label($col)) ?></th><?php endforeach; ?>
-                    <th>Acciones</th>
-                </tr>
-            </thead>
-            <tbody>
-            <?php foreach ($rows as $row): ?>
-                <tr>
-                    <?php foreach ($columns as $col): ?><td><?= h(format_cell($col, $row[$col] ?? null)) ?></td><?php endforeach; ?>
-                    <td class="actions">
-                        <button class="icon-btn" type="button" title="Editar" onclick='editMaintainer(<?= h(json_encode($row, JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT)) ?>)'>✎</button>
-                        <form method="post" class="inline" onsubmit="return confirm('¿Eliminar este registro?');">
-                            <input type="hidden" name="action" value="maintainer">
-                            <input type="hidden" name="module" value="<?= h($key) ?>">
-                            <input type="hidden" name="op" value="D">
-                            <?php foreach ($meta['id'] as $id): ?>
-                                <input type="hidden" name="original_<?= h($id['name']) ?>" value="<?= h($row[$id['name']] ?? '') ?>">
-                            <?php endforeach; ?>
-                            <button class="icon-btn danger" type="submit" title="Eliminar">⌫</button>
-                        </form>
-                    </td>
-                </tr>
-            <?php endforeach; ?>
-            <?php if (!$rows): ?>
-                <tr><td colspan="<?= count($columns) + 1 ?>" class="empty">Todavia no hay registros.</td></tr>
-            <?php endif; ?>
-            </tbody>
-        </table>
-    </div>
-</section>
-
-<div class="modal" id="recordModal">
-    <div class="modal-card">
-        <div class="modal-head">
-            <div><span class="eyebrow">FORMULARIO</span><h3 id="modalTitle">Nuevo registro</h3></div>
-            <button class="icon-btn" type="button" onclick="closeModal()">×</button>
-        </div>
-        <form method="post" id="recordForm">
-            <input type="hidden" name="action" value="maintainer">
-            <input type="hidden" name="module" value="<?= h($key) ?>">
-            <input type="hidden" name="op" id="formOp" value="<?= in_array(old_value('op'), ['I', 'U'], true) ? h(old_value('op')) : 'I' ?>">
-
-            <?php foreach ($meta['id'] as $id): ?>
-                <?php if (!empty($id['auto'])): ?>
-                    <input type="hidden" name="original_<?= h($id['name']) ?>" id="orig_<?= h($id['name']) ?>" value="<?= h(old_value('original_' . $id['name'])) ?>">
-                <?php else: ?>
-                    <label id="idwrap_<?= h($id['name']) ?>"><?= h($id['label'] ?? column_label($id['name'])) ?>
-                        <?php if (isset($id['source'])): ?>
-                            <select name="<?= h($id['name']) ?>" id="field_<?= h($id['name']) ?>" data-idfield="1">
-                                <option value="">Seleccione...</option>
-                                <?php foreach (lookup_options($id['source']) as $option): ?>
-                                    <option value="<?= h($option['value']) ?>" <?= (string)old_value($id['name']) === (string)$option['value'] ? 'selected' : '' ?>><?= h($option['label']) ?></option>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-striped table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <?php foreach ($columns as $col): ?><th><?= h(column_label($col)) ?></th><?php endforeach; ?>
+                        <th class="text-end">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                <?php foreach ($rows as $row): ?>
+                    <tr>
+                        <?php foreach ($columns as $col): ?><td><?= h(format_cell($col, $row[$col] ?? null)) ?></td><?php endforeach; ?>
+                        <td class="text-end text-nowrap">
+                            <button class="btn btn-sm btn-outline-primary" type="button" title="Editar" onclick='editMaintainer(<?= h(json_encode($row, JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT)) ?>)'>
+                                <i class="bi bi-pencil"></i>
+                            </button>
+                            <form method="post" class="d-inline" onsubmit="return confirm('¿Eliminar este registro?');">
+                                <input type="hidden" name="action" value="maintainer">
+                                <input type="hidden" name="module" value="<?= h($key) ?>">
+                                <input type="hidden" name="op" value="D">
+                                <?php foreach ($meta['id'] as $id): ?>
+                                    <input type="hidden" name="original_<?= h($id['name']) ?>" value="<?= h($row[$id['name']] ?? '') ?>">
                                 <?php endforeach; ?>
-                            </select>
-                        <?php else: ?>
-                            <input
-                                type="<?= ($id['type'] ?? 'text') === 'number' ? 'number' : 'text' ?>"
-                                name="<?= h($id['name']) ?>"
-                                id="field_<?= h($id['name']) ?>"
-                                data-idfield="1"
-                                <?= str_starts_with($id['name'], 'RUT_') ? 'data-rut="1"' : '' ?>
-                                placeholder="<?= h($id['placeholder'] ?? '') ?>"
-                                value="<?= h(old_value($id['name'])) ?>">
-                        <?php endif; ?>
-                    </label>
-                    <input type="hidden" name="original_<?= h($id['name']) ?>" id="orig_<?= h($id['name']) ?>" value="<?= h(old_value('original_' . $id['name'])) ?>">
+                                <button class="btn btn-sm btn-outline-danger" type="submit" title="Eliminar"><i class="bi bi-trash"></i></button>
+                            </form>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+                <?php if (!$rows): ?>
+                    <tr><td colspan="<?= count($columns) + 1 ?>" class="text-center text-body-secondary py-4">Todavia no hay registros.</td></tr>
                 <?php endif; ?>
-            <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
 
-            <?php foreach ($meta['fields'] as $field): ?>
-                <label><?= h($field['label']) ?>
-                    <?php if (in_array($field['type'], ['select', 'domain'], true)): ?>
-                        <select name="<?= h($field['name']) ?>" id="field_<?= h($field['name']) ?>">
-                            <option value="">Seleccione...</option>
-                            <?php foreach (field_options($field) as $option): ?>
-                                <option value="<?= h($option['value']) ?>" <?= (string)old_value($field['name']) === (string)$option['value'] ? 'selected' : '' ?>><?= h($option['label']) ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    <?php elseif ($field['type'] === 'textarea'): ?>
-                        <textarea name="<?= h($field['name']) ?>" id="field_<?= h($field['name']) ?>" rows="3"><?= h(old_value($field['name'])) ?></textarea>
-                    <?php else: ?>
-                        <?php
-                        $inputType = in_array($field['type'], ['number', 'date', 'datetime-local', 'email', 'tel'], true) ? $field['type'] : 'text';
-                        $extra = '';
-                        if ($inputType === 'number') {
-                            $extra = ' step="any"';
-                        }
-                        if ($inputType === 'tel') {
-                            $extra .= ' data-phone="1"';
-                        }
-                        ?>
-                        <input type="<?= h($inputType) ?>" name="<?= h($field['name']) ?>" id="field_<?= h($field['name']) ?>"
-                               placeholder="<?= h($field['placeholder'] ?? '') ?>"<?= $extra ?>
-                               value="<?= h(old_value($field['name'])) ?>">
-                    <?php endif; ?>
-                </label>
-            <?php endforeach; ?>
+<div class="modal fade" id="recordModal" tabindex="-1" aria-labelledby="modalTitle" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <form method="post" id="recordForm" class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <div class="text-uppercase small text-body-secondary fw-semibold">Formulario</div>
+                    <h5 class="modal-title" id="modalTitle">Nuevo registro</h5>
+                </div>
+                <button class="btn-close" type="button" onclick="closeModal()" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" name="action" value="maintainer">
+                <input type="hidden" name="module" value="<?= h($key) ?>">
+                <input type="hidden" name="op" id="formOp" value="<?= in_array(old_value('op'), ['I', 'U'], true) ? h(old_value('op')) : 'I' ?>">
 
-            <div class="modal-actions">
-                <button class="btn ghost" type="button" onclick="closeModal()">Cancelar</button>
-                <button class="btn primary" type="submit">Guardar</button>
+                <div class="row g-3">
+                    <?php foreach ($meta['id'] as $id): ?>
+                        <?php if (!empty($id['auto'])): ?>
+                            <input type="hidden" name="original_<?= h($id['name']) ?>" id="orig_<?= h($id['name']) ?>" value="<?= h(old_value('original_' . $id['name'])) ?>">
+                        <?php else: ?>
+                            <div class="col-md-6" id="idwrap_<?= h($id['name']) ?>">
+                                <label class="form-label" for="field_<?= h($id['name']) ?>"><?= h($id['label'] ?? column_label($id['name'])) ?></label>
+                                <?php if (isset($id['source'])): ?>
+                                    <select class="form-select" name="<?= h($id['name']) ?>" id="field_<?= h($id['name']) ?>" data-idfield="1">
+                                        <option value="">Seleccione...</option>
+                                        <?php foreach (lookup_options($id['source']) as $option): ?>
+                                            <option value="<?= h($option['value']) ?>" <?= (string)old_value($id['name']) === (string)$option['value'] ? 'selected' : '' ?>><?= h($option['label']) ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                <?php else: ?>
+                                    <input
+                                        class="form-control"
+                                        type="<?= ($id['type'] ?? 'text') === 'number' ? 'number' : 'text' ?>"
+                                        name="<?= h($id['name']) ?>"
+                                        id="field_<?= h($id['name']) ?>"
+                                        data-idfield="1"
+                                        <?= str_starts_with($id['name'], 'RUT_') ? 'data-rut="1"' : '' ?>
+                                        placeholder="<?= h($id['placeholder'] ?? '') ?>"
+                                        value="<?= h(old_value($id['name'])) ?>">
+                                <?php endif; ?>
+                                <input type="hidden" name="original_<?= h($id['name']) ?>" id="orig_<?= h($id['name']) ?>" value="<?= h(old_value('original_' . $id['name'])) ?>">
+                            </div>
+                        <?php endif; ?>
+                    <?php endforeach; ?>
+
+                    <?php foreach ($meta['fields'] as $field): ?>
+                        <?php if (in_array($field['type'], ['select', 'domain'], true)): ?>
+                            <?php if (($field['source'] ?? '') === 'comunas_chile'): ?>
+                                <?php
+                                $comunaOpts = [];
+                                foreach (db_query('SELECT NOMBRE_COMUNA, NOMBRE_REGION FROM LEHZ_VW_COMUNAS_CHILE ORDER BY NOMBRE_REGION, NOMBRE_COMUNA') as $opt) {
+                                    $comunaOpts[] = ['value' => $opt['NOMBRE_COMUNA'], 'label' => $opt['NOMBRE_COMUNA'], 'group' => $opt['NOMBRE_REGION']];
+                                }
+                                ?>
+                                <div class="col-md-6">
+                                    <label class="form-label" for="ac_<?= h($field['name']) ?>"><?= h($field['label']) ?></label>
+                                    <div class="position-relative">
+                                        <input type="hidden" name="<?= h($field['name']) ?>" id="field_<?= h($field['name']) ?>" value="<?= h(old_value($field['name'])) ?>">
+                                        <input type="text" class="form-control ac-input" id="ac_<?= h($field['name']) ?>" placeholder="Buscar comuna..." autocomplete="off" value="<?= h(old_value($field['name'])) ?>">
+                                        <div class="ac-dropdown list-group shadow" id="acdd_<?= h($field['name']) ?>"></div>
+                                    </div>
+                                    <script>window.LEHZ_AC = window.LEHZ_AC || {}; window.LEHZ_AC['<?= h($field['name']) ?>'] = <?= json_encode($comunaOpts, JSON_UNESCAPED_UNICODE) ?>;</script>
+                                </div>
+                            <?php else: ?>
+                                <?php if (($field['source'] ?? '') === 'regiones_chile'): ?>
+                                    <?php
+                                    $regionOpts = [];
+                                    foreach (field_options($field) as $option) {
+                                        $regionOpts[] = ['value' => $option['value'], 'label' => $option['label']];
+                                    }
+                                    ?>
+                                    <div class="col-md-6">
+                                        <label class="form-label" for="ac_<?= h($field['name']) ?>"><?= h($field['label']) ?></label>
+                                        <div class="position-relative">
+                                            <input type="hidden" name="<?= h($field['name']) ?>" id="field_<?= h($field['name']) ?>" value="<?= h(old_value($field['name'])) ?>">
+                                            <input type="text" class="form-control ac-input" id="ac_<?= h($field['name']) ?>" placeholder="Buscar region..." autocomplete="off" value="<?= h(old_value($field['name'])) ?>">
+                                            <div class="ac-dropdown list-group shadow" id="acdd_<?= h($field['name']) ?>"></div>
+                                        </div>
+                                        <script>window.LEHZ_AC = window.LEHZ_AC || {}; window.LEHZ_AC['<?= h($field['name']) ?>'] = <?= json_encode($regionOpts, JSON_UNESCAPED_UNICODE) ?>;</script>
+                                    </div>
+                                <?php else: ?>
+                                    <div class="col-md-6">
+                                        <label class="form-label" for="field_<?= h($field['name']) ?>"><?= h($field['label']) ?></label>
+                                        <select class="form-select" name="<?= h($field['name']) ?>" id="field_<?= h($field['name']) ?>">
+                                            <option value="">Seleccione...</option>
+                                            <?php foreach (field_options($field) as $option): ?>
+                                                <option value="<?= h($option['value']) ?>" <?= (string)old_value($field['name']) === (string)$option['value'] ? 'selected' : '' ?>><?= h($option['label']) ?></option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </div>
+                                <?php endif; ?>
+                            <?php endif; ?>
+                        <?php elseif ($field['type'] === 'textarea'): ?>
+                            <div class="col-12">
+                                <label class="form-label" for="field_<?= h($field['name']) ?>"><?= h($field['label']) ?></label>
+                                <textarea class="form-control" name="<?= h($field['name']) ?>" id="field_<?= h($field['name']) ?>" rows="3"><?= h(old_value($field['name'])) ?></textarea>
+                            </div>
+                        <?php else: ?>
+                            <?php
+                            if (str_starts_with($field['name'], 'HORA_')) {
+                                $inputType = 'time';
+                            } else {
+                                $inputType = in_array($field['type'], ['number', 'date', 'datetime-local', 'email', 'tel'], true) ? $field['type'] : 'text';
+                            }
+                            $extra = '';
+                            if ($inputType === 'number') {
+                                $extra = ' step="any"';
+                            }
+                            if ($inputType === 'tel') {
+                                $extra .= ' data-phone="1"';
+                            }
+                            if ($inputType === 'date') {
+                                $extra .= ' min="' . date('Y-m-d') . '"';
+                            }
+                            ?>
+                            <?php if ($inputType === 'tel'): ?>
+                                <?php
+                                $pv = (string)old_value($field['name']);
+                                $prefix = '+56 9';
+                                $num = $pv;
+                                if (strpos($pv, '+56 9') === 0) { $prefix = '+56 9'; $num = trim(substr($pv, 5)); }
+                                elseif (strpos($pv, '600') === 0) { $prefix = '600'; $num = trim(substr($pv, 3)); }
+                                elseif (strpos($pv, '809') === 0) { $prefix = '809'; $num = trim(substr($pv, 3)); }
+                                elseif (strpos($pv, '+56') === 0) { $prefix = '+56 9'; $num = trim(substr($pv, 4)); }
+                                ?>
+                                <div class="col-md-6">
+                                    <label class="form-label" for="num_<?= h($field['name']) ?>"><?= h($field['label']) ?></label>
+                                    <div class="input-group">
+                                        <select class="form-select phone-prefix" data-target="field_<?= h($field['name']) ?>">
+                                            <option value="+56 9" <?= $prefix === '+56 9' ? 'selected' : '' ?>>+56 9</option>
+                                            <option value="600" <?= $prefix === '600' ? 'selected' : '' ?>>600</option>
+                                            <option value="809" <?= $prefix === '809' ? 'selected' : '' ?>>809</option>
+                                        </select>
+                                        <input class="form-control" type="tel" id="num_<?= h($field['name']) ?>" placeholder="912345678" maxlength="9" value="<?= h($num) ?>" data-phone-number="1" required>
+                                        <input type="hidden" name="<?= h($field['name']) ?>" id="field_<?= h($field['name']) ?>" value="<?= h($pv) ?>">
+                                    </div>
+                                </div>
+                            <?php else: ?>
+                                <div class="col-md-6">
+                                    <label class="form-label" for="field_<?= h($field['name']) ?>"><?= h($field['label']) ?></label>
+                                    <input class="form-control" type="<?= h($inputType) ?>" name="<?= h($field['name']) ?>" id="field_<?= h($field['name']) ?>"
+                                           placeholder="<?= h($field['placeholder'] ?? '') ?>"<?= $extra ?>
+                                           value="<?= h(old_value($field['name'])) ?>">
+                                </div>
+                            <?php endif; ?>
+                        <?php endif; ?>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline-secondary" type="button" onclick="closeModal()">Cancelar</button>
+                <button class="btn btn-primary" type="submit">Guardar</button>
             </div>
         </form>
     </div>
@@ -140,7 +229,12 @@ window.LEHZ_MAINTAINER = {
 document.addEventListener('DOMContentLoaded', function () {
     var modal = document.getElementById('recordModal');
     if (!modal) return;
-    modal.classList.add('show');
+    if (window.bootstrap && bootstrap.Modal) {
+        bootstrap.Modal.getOrCreateInstance(modal).show();
+    } else {
+        modal.classList.add('show');
+        modal.style.display = 'block';
+    }
     document.getElementById('modalTitle').textContent = 'Revisar datos';
     var op = document.getElementById('formOp').value;
     if (op === 'U') {
