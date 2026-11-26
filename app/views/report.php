@@ -2,10 +2,7 @@
 $rows = db_rows($report['proc']);
 $columns = $rows ? array_keys($rows[0]) : [];
 
-/**
- * Funciones de apoyo para los graficos del reporte.
- * Trabajan solo con los datos ya devueltos por Oracle; no inventan informacion.
- */
+// Esta parte del código se encarga de preparar los datos de Oracle para los graficos.
 function lehz_report_money(array $row, array $cols): float {
     foreach ($cols as $col) {
         if (is_money_column($col) && is_numeric($row[$col] ?? null)) {

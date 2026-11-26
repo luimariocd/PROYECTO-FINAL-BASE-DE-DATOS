@@ -1,9 +1,9 @@
--- Migracion estructural de LEHZTEST a LEHZ (sin borrar datos)
+-- Esta parte del código se encarga de migrar la estructura de LEHZTEST a LEHZ sin borrar datos.
 SET DEFINE OFF
 SET SQLBLANKLINES ON
 WHENEVER SQLERROR CONTINUE
 
--- 0. Respaldo de datos originales
+-- Esta parte del código se encarga de respaldar los datos originales antes de migrar.
 DROP TABLE LEHZ_BAK_LEHZ_ASIENTO PURGE;
 DROP TABLE LEHZ_BAK_LEHZ_AUDITORIA PURGE;
 DROP TABLE LEHZ_BAK_LEHZ_BOLETO PURGE;
@@ -45,7 +45,7 @@ CREATE TABLE LEHZ_BAK_LEHZ_USUARIO AS SELECT * FROM LEHZ.LEHZ_USUARIO;
 CREATE TABLE LEHZ_BAK_LEHZ_UTILIZAN AS SELECT * FROM LEHZ.LEHZ_UTILIZAN;
 CREATE TABLE LEHZ_BAK_LEHZ_VIAJE AS SELECT * FROM LEHZ.LEHZ_VIAJE;
 
--- 1. Columnas nuevas en tablas existentes
+-- Esta parte del código se encarga de agregar columnas a las tablas existentes.
 ALTER TABLE LEHZ_ASIENTO ADD (PISO NUMBER(1) DEFAULT 1 NOT NULL);
 ALTER TABLE LEHZ_BOLETO ADD (ESTADO VARCHAR2(10) DEFAULT 'EMITIDO' NOT NULL, FECHA_ANULACION DATE, MOTIVO_ANULACION VARCHAR2(200));
 ALTER TABLE LEHZ_BUS ADD (ANIO_FABRICACION NUMBER, TIPO_SERVICIO VARCHAR2(20) DEFAULT 'NORMAL' NOT NULL, CANTIDAD_PISOS NUMBER(1) DEFAULT 1 NOT NULL, TARIFA_BASE NUMBER(8) DEFAULT 5000 NOT NULL);
@@ -59,7 +59,7 @@ UPDATE LEHZ_RUTA SET ID_TERMINAL_ORIGEN = (SELECT MIN(ID_TERMINAL) FROM LEHZ_TER
 ALTER TABLE LEHZ_RUTA MODIFY (NOMBRE_RUTA NOT NULL, ID_TERMINAL_ORIGEN NOT NULL, ID_TERMINAL_DESTINO NOT NULL);
 COMMIT;
 
--- 2. Tablas nuevas
+-- Esta parte del código se encarga de crear las tablas que faltaban.
 CREATE TABLE "LEHZ_PASAJE_BAJADA" 
    (	"ID_BAJADA" NUMBER NOT NULL ENABLE, 
 	"ID_BOLETO" NUMBER NOT NULL ENABLE, 
@@ -129,7 +129,7 @@ CREATE TABLE "LEHZ_RUTA_PARADA"
   BUFFER_POOL DEFAULT FLASH_CACHE DEFAULT CELL_FLASH_CACHE DEFAULT)
   TABLESPACE "USERS";
 
--- 3. Restricciones nuevas (se ignoran las que ya existen por datos incompatibles)
+-- Esta parte del código se encarga de agregar restricciones y omitir las que chocan con datos heredados.
 BEGIN
   EXECUTE IMMEDIATE q'[ALTER TABLE "LEHZ_ASIENTO" ADD CONSTRAINT "CK_ASIENTO_NUMERO" CHECK (NUMERO_ASIENTO > 0) ENABLE]';
   DBMS_OUTPUT.PUT_LINE('CONSTRAINT OK: CK_ASIENTO_NUMERO');
@@ -408,7 +408,7 @@ EXCEPTION WHEN OTHERS THEN
 END;
 /
 
--- 4. Indices nuevos
+-- Esta parte del código se encarga de crear los indices de busqueda.
 BEGIN
   EXECUTE IMMEDIATE q'[CREATE UNIQUE INDEX UQ_LEHZ_BOLETO_ASIENTO_ACTIVO ON LEHZ_BOLETO (CASE WHEN ESTADO IN ('EMITIDO','USADO') THEN ID_VIAJE END, CASE WHEN ESTADO IN ('EMITIDO','USADO') THEN PATENTE_BUS END, CASE WHEN ESTADO IN ('EMITIDO','USADO') THEN NUMERO_ASIENTO END)]';
 EXCEPTION WHEN OTHERS THEN NULL;
@@ -420,7 +420,7 @@ EXCEPTION WHEN OTHERS THEN NULL;
 END;
 /
 
--- 5. Triggers antiguos que se sustituyen por la version nueva
+-- Esta parte del código se encarga de reemplazar los triggers antiguos.
 BEGIN
   EXECUTE IMMEDIATE 'DROP TRIGGER TRG_AUDITORIA_BUSES';
 EXCEPTION WHEN OTHERS THEN NULL;
@@ -437,7 +437,7 @@ EXCEPTION WHEN OTHERS THEN NULL;
 END;
 /
 
--- 6. Secuencias (se recrean con los valores de LEHZTEST)
+-- Esta parte del código se encarga de recrear las secuencias con los valores de LEHZTEST.
 BEGIN
   EXECUTE IMMEDIATE 'DROP SEQUENCE LEHZ_SEQ_AUDITORIA';
 EXCEPTION WHEN OTHERS THEN NULL;
@@ -513,7 +513,7 @@ CREATE SEQUENCE  "LEHZ_SEQ_TERMINAL"  MINVALUE 1 MAXVALUE 9999999999999999999999
 CREATE SEQUENCE  "LEHZ_SEQ_USUARIO"  MINVALUE 1 MAXVALUE 9999999999999999999999999999 INCREMENT BY 1 START WITH 5 NOCACHE  NOORDER  NOCYCLE  NOKEEP  NOSCALE  GLOBAL;
 CREATE SEQUENCE  "LEHZ_SEQ_VIAJE"  MINVALUE 1 MAXVALUE 9999999999999999999999999999 INCREMENT BY 1 START WITH 7 NOCACHE  NOORDER	NOCYCLE  NOKEEP  NOSCALE  GLOBAL;
 
--- 7. Objetos de Oracle (paquetes, funciones, procedimientos, vistas y triggers)
+-- Esta parte del código se encarga de crear los objetos PL/SQL de Oracle.
 CREATE OR REPLACE PACKAGE "LEHZ_PKG_AUDITORIA" AS
     PROCEDURE REGISTRAR(
 	p_tabla     IN VARCHAR2,
@@ -789,10 +789,6 @@ BEGIN
 	RAISE_APPLICATION_ERROR(-20010, 'RUT invalido: debe tener 7 u 8 digitos mas su digito verificador (ej. 12.345.678-K).');
     END IF;
 
-    -- Casos:
-    --	 Con guion: el ultimo caracter es el DV.
-    --	 Sin guion y 9 caracteres: los primeros 8 son el cuerpo y el ultimo el DV.
-    --	 Sin guion y 7 u 8 caracteres: el usuario no ingreso DV; se calcula.
     IF INSTR(v_original, '-') > 0 OR SUBSTR(v_clean, -1, 1) = 'K' THEN
 	v_cuerpo := SUBSTR(v_clean, 1, LENGTH(v_clean) - 1);
 	v_dv_ing := SUBSTR(v_clean, -1, 1);
@@ -820,7 +816,7 @@ BEGIN
 	RAISE_APPLICATION_ERROR(-20010, 'RUT invalido para empresa: debe ser igual o superior a 50.000.000.');
     END IF;
 
-    -- Calculo Modulo 11
+    -- Esta parte del código se encarga de calcular el digito verificador con modulo 11.
     FOR i IN REVERSE 1..LENGTH(v_cuerpo) LOOP
 	v_suma := v_suma + (TO_NUMBER(SUBSTR(v_cuerpo, i, 1)) * v_mult);
 	v_mult := CASE WHEN v_mult = 7 THEN 2 ELSE v_mult + 1 END;
@@ -918,7 +914,7 @@ BEGIN
 	    RAISE_APPLICATION_ERROR(-20011, 'Telefono personal invalido: debe tener formato movil chileno +569 seguido de 8 digitos (ej. +56912345678).');
 	END IF;
     ELSE
-	-- Los numeros 600 y 809 son nacionales y NO llevan +56.
+	-- Esta parte del código se encarga de aceptar 600 y 809 sin el prefijo +56.
 	IF LENGTH(v_digits) = 9 AND SUBSTR(v_digits, 1, 3) IN ('600', '809') THEN
 	    v_tel := v_digits;
 	ELSIF LENGTH(v_digits) = 9 AND SUBSTR(v_digits, 1, 1) BETWEEN '2' AND '9' THEN
@@ -1024,8 +1020,7 @@ BEGIN
 	RETURN;
     END IF;
 
-    -- Solo un ADMINISTRADOR puede crear cuentas con privilegios superiores.
-    -- Un formulario publico siempre crea VENDEDOR.
+    -- Esta parte del código se encarga de permitir solo al ADMINISTRADOR crear cuentas con mas privilegios.
     IF UPPER(NVL(p_rol_ejecutor, 'PUBLICO')) <> 'ADMINISTRADOR' THEN
 	v_rol_final := 'VENDEDOR';
     ELSE
@@ -1994,7 +1989,7 @@ BEGIN
 	IF p_hora_salida IS NULL OR p_hora_llegada IS NULL THEN
 	    RAISE_APPLICATION_ERROR(-20090, 'Debe indicar la hora de salida y la hora de llegada.');
 	END IF;
-	-- Si la llegada es menor o igual a la salida, se asume que llega al dia siguiente.
+	-- Esta parte del código se encarga de pasar la llegada al dia siguiente si es menor a la salida.
 	IF v_llegada <= p_hora_salida THEN
 	    v_llegada := v_llegada + INTERVAL '1' DAY;
 	END IF;
@@ -4232,7 +4227,7 @@ BEGIN
 	RAISE_APPLICATION_ERROR(-20202, 'Piso invalido: el bus tiene ' || v_pisos || ' piso(s).');
     END IF;
 
-    -- Distribucion 2+2: 1 y 4 son ventana; 2 y 3 son pasillo.
+    -- Esta parte del código se encarga de asignar ventana a 1 y 4, pasillo a 2 y 3.
     v_ubicacion := CASE MOD(:NEW.NUMERO_ASIENTO - 1, 4)
 			WHEN 0 THEN 'VENTANA'
 			WHEN 3 THEN 'VENTANA'
@@ -4266,7 +4261,7 @@ BEGIN
 	v_detalle   := 'Se elimino el bus con patente: ' || :OLD.PATENTE_BUS;
     END IF;
 
-    -- Inserta en la bitacora de auditoria usando la secuencia
+    -- Esta parte del código se encarga de guardar el cambio en la auditoria con su correlativo.
     INSERT INTO LEHZ_AUDITORIA (
 	ID_AUDITORIA, TABLA_AFECTADA, OPERACION, ID_REGISTRO, DETALLE, USUARIO_BD, FECHA_EVENTO
     ) VALUES (
@@ -4931,7 +4926,7 @@ END;
 ALTER TRIGGER "LEHZ_TRG_VIAJE_FECHA" ENABLE;
 /
 
--- 8. Recompilar objetos invalidos
+-- Esta parte del código se encarga de recompilar los objetos que quedaron invalidos.
 BEGIN
   FOR r IN (SELECT object_name, object_type FROM user_objects WHERE status='INVALID' AND object_type IN ('PACKAGE','PACKAGE BODY','PROCEDURE','FUNCTION','TRIGGER','VIEW')) LOOP
     BEGIN

@@ -1,17 +1,17 @@
 ALTER SESSION SET CURRENT_SCHEMA = LEHZ;
 
--- 01_rep_recaudacion_viajes
+-- Esta parte del código se encarga de eliminar el reporte de recaudacion.
 BEGIN EXECUTE IMMEDIATE 'DROP PROCEDURE LEHZ_PS_REP_RECAUDACION_VIAJES'; EXCEPTION WHEN OTHERS THEN NULL; END;
 /
 
--- 02_rep_costos_mantencion
+-- Esta parte del código se encarga de eliminar el reporte de costos.
 BEGIN EXECUTE IMMEDIATE 'DROP PROCEDURE LEHZ_PS_REP_COSTOS_MANTENCION'; EXCEPTION WHEN OTHERS THEN NULL; END;
 /
 
--- 03_rep_ocupacion_asientos
+-- Esta parte del código se encarga de eliminar el reporte de ocupacion.
 BEGIN EXECUTE IMMEDIATE 'DROP PROCEDURE LEHZ_PS_REP_OCUPACION_ASIENTOS'; EXCEPTION WHEN OTHERS THEN NULL; END;
 /
 
--- 04_rep_itinerario_paradas
+-- Esta parte del código se encarga de eliminar el reporte de itinerario.
 BEGIN EXECUTE IMMEDIATE 'DROP PROCEDURE LEHZ_PS_REP_ITINERARIO_PARADAS'; EXCEPTION WHEN OTHERS THEN NULL; END;
 /

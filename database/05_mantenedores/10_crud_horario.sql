@@ -1,8 +1,6 @@
 ALTER SESSION SET CURRENT_SCHEMA = LEHZ;
 
--- ============================================================================
--- MANTENEDOR 10: HORARIOS
--- ============================================================================
+-- Esta parte del código se encarga de crear el mantenedor de horarios.
 CREATE OR REPLACE PROCEDURE LEHZ_PS_IUD_HORARIO(
     p_opcion       IN VARCHAR2,
     p_id_horario   IN OUT NUMBER,
@@ -21,7 +19,7 @@ BEGIN
         IF p_hora_salida IS NULL OR p_hora_llegada IS NULL THEN
             RAISE_APPLICATION_ERROR(-20090, 'Debe indicar la hora de salida y la hora de llegada.');
         END IF;
-        -- Si la llegada es menor o igual a la salida, se asume que llega al dia siguiente.
+        -- Esta parte del código se encarga de pasar la llegada al dia siguiente si es menor a la salida.
         IF v_llegada <= p_hora_salida THEN
             v_llegada := v_llegada + INTERVAL '1' DAY;
         END IF;

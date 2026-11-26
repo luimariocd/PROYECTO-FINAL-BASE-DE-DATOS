@@ -1,8 +1,6 @@
 ALTER SESSION SET CURRENT_SCHEMA = LEHZ;
 
--- ============================================================================
--- MANTENEDOR 02: COMUNAS
--- ============================================================================
+-- Esta parte del código se encarga de crear el mantenedor de comunas.
 CREATE OR REPLACE PROCEDURE LEHZ_PS_IUD_COMUNA(
     p_opcion        IN VARCHAR2,
     p_id_comuna     IN OUT NUMBER,

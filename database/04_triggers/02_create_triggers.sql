@@ -20,7 +20,7 @@ BEGIN
         v_detalle   := 'Se elimino el bus con patente: ' || :OLD.PATENTE_BUS;
     END IF;
 
-    -- Inserta en la bitacora de auditoria usando la secuencia
+    -- Esta parte del código se encarga de guardar el cambio en la auditoria con su correlativo.
     INSERT INTO LEHZ_AUDITORIA (
         ID_AUDITORIA, TABLA_AFECTADA, OPERACION, ID_REGISTRO, DETALLE, USUARIO_BD, FECHA_EVENTO
     ) VALUES (

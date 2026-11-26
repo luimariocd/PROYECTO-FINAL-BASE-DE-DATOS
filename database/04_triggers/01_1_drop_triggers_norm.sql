@@ -1,6 +1,4 @@
--- ============================================================================
--- [01_1] LIMPIEZA DE TRIGGERS Y FUNCIONES DE NORMALIZACION Y VALIDACION
--- ============================================================================
+-- Esta parte del código se encarga de eliminar triggers y funciones de normalizacion.
 ALTER SESSION SET CURRENT_SCHEMA = LEHZ;
 
 BEGIN EXECUTE IMMEDIATE 'DROP TRIGGER LEHZ_TRG_NORM_VAL_USUARIO'; EXCEPTION WHEN OTHERS THEN NULL; END;

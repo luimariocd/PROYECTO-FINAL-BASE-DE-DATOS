@@ -49,12 +49,11 @@ Copia desde la copia de la rama `Denunce` estos elementos y reemplaza los tuyos:
 
 ```text
 app/                         # carpeta completa (incluye views/, public/assets/ y public/adminlte/)
-errores.md                   # registro de hallazgos
 ```
 
 No reemplaces `database/` ni `docker-compose.yml` si tu base ya funciona.
 
-### 3) Comprueba que los archivos nuevos llegaron
+### 3) Comprueba que los archivos llegaron
 
 ```powershell
 Test-Path app\public\adminlte\css\adminlte.min.css
@@ -97,14 +96,12 @@ También revisa que Docker Desktop tenga habilitado el *file sharing* de la carp
 
 > **No ejecutes `docker compose down -v`** salvo que quieras borrar la base de datos completa.
 
-> **Compañero con laptop de 4 GB:** no instale Docker ni Oracle local. Debe usar `GUIA_LAPTOP_4GB.md` para conectarse al servidor del equipo por Tailscale.
-
 ---
 
 ## Requisitos Previos
 
 * **Git** instalado.
-* **Windows 10/11** con virtualización habilitada *(para equipos con 8 GB o 16 GB de RAM; si tu computador tiene 4 GB de RAM, no instales Docker: sigue **`GUIA_LAPTOP_4GB.md`** y conecta de forma remota al servidor del equipo).*
+* **Windows 10/11** con virtualización habilitada.
 * **Visual Studio Code** instalado.
 
 ---
@@ -130,8 +127,7 @@ Docker Desktop necesita el **Subsistema de Windows para Linux (WSL 2)** para eje
 
 ## 2. Clonar el Repositorio y Levantar Docker (Oracle + Aplicación Web PHP)
 
-> **Esta sección es SOLO para el PC servidor con 8 GB o 16 GB de RAM.**  
-> Si tu laptop tiene **4 GB**, no instales Docker ni ejecutes estos comandos: ve directo a **`GUIA_LAPTOP_4GB.md`** y conecta por Tailscale al servidor del equipo.
+> Esta sección es para el PC que corre Docker con el proyecto.
 
 El archivo `docker-compose.yml` junto con el `Dockerfile` levantan automáticamente dos servicios conectados entre sí:
 * **`oracle-db`** (contenedor `oracle-lehz`): Base de datos Oracle Database Free (`FREEPDB1`), accesible solo desde la red interna de Docker en el puerto `1521` (**no publicado en el host**).
@@ -266,15 +262,14 @@ git merge main
 
 ```text
 PROYECTO-FINAL-BASE-DE-DATOS/
-├── .vscode/               # Extensiones recomendadas de VS Code
 ├── app/                   # Capa cliente PHP + OCI8 (interfaz y conexión a Oracle)
 │   ├── public/
-│   │   ├── adminlte/      # Assets de AdminLTE 4 (CSS/JS) — NUEVO en esta versión
+│   │   ├── adminlte/      # Archivos CSS/JS de AdminLTE
 │   │   ├── assets/        # app.css y app.js (tema, gráficos, autocompletado)
 │   │   └── index.php      # Router/controlador
 │   └── views/             # Vistas migradas a AdminLTE/Bootstrap 5
 ├── database/              # Scripts Oracle PL/SQL (prefijo LEHZ_)
-│   ├── 01_tablas/         # Drops, creación de tablas y 03_cat_chile.sql (NUEVO)
+│   ├── 01_tablas/         # Drops, creación de tablas y catálogo de Chile
 │   ├── 02_secuencias/     # Secuencias para llaves primarias
 │   ├── 03_seguridad/      # Usuarios, roles y autenticación
 │   ├── 04_triggers/       # Disparadores de monitoreo y validación (+ drop/)
@@ -284,10 +279,7 @@ PROYECTO-FINAL-BASE-DE-DATOS/
 │   ├── 08_datos_prueba/   # Carga de datos reales para demostración (+ Drops/)
 │   └── 04_migracion/      # Migración LEHZTEST → LEHZ y respaldos LEHZ_BAK_*
 ├── docs/                  # Diagrama 3FN, presentación PPT y video demo
-├── CONEXION_REMOTA.md     # Guía de conexión remota vía Tailscale (web + Oracle)
-├── GUIA_LAPTOP_4GB.md     # Guía para laptop de 4 GB: usar el sistema sin Docker local
 ├── Dockerfile             # Construcción del contenedor PHP 8 + extensión OCI8
 ├── docker-compose.yml     # Orquestación de contenedores (Oracle + Web PHP)
-├── errores.md             # Registro de hallazgos y estado de pruebas (NUEVO)
 └── README.md              # Guía de instalación, actualización y flujo Git
 ```

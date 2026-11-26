@@ -1,9 +1,9 @@
--- Reparacion de triggers y limpieza de procedimientos heredados invalidos
+-- Esta parte del código se encarga de reparar triggers y borrar procedimientos heredados.
 SET DEFINE OFF
 SET SQLBLANKLINES ON
 WHENEVER SQLERROR CONTINUE
 
--- Procedimientos antiguos que ya no existen en la version nueva
+-- Esta parte del código se encarga de eliminar procedimientos heredados que ya no existen.
 BEGIN
   EXECUTE IMMEDIATE 'DROP PROCEDURE LEHZ_PS_ACTUALIZAR_TERMINAL';
 EXCEPTION WHEN OTHERS THEN NULL;
@@ -45,7 +45,7 @@ BEGIN
 	RAISE_APPLICATION_ERROR(-20202, 'Piso invalido: el bus tiene ' || v_pisos || ' piso(s).');
     END IF;
 
-    -- Distribucion 2+2: 1 y 4 son ventana; 2 y 3 son pasillo.
+    -- Esta parte del código se encarga de asignar ventana a 1 y 4, pasillo a 2 y 3.
     v_ubicacion := CASE MOD(:NEW.NUMERO_ASIENTO - 1, 4)
 			WHEN 0 THEN 'VENTANA'
 			WHEN 3 THEN 'VENTANA'
@@ -79,7 +79,7 @@ BEGIN
 	v_detalle   := 'Se elimino el bus con patente: ' || :OLD.PATENTE_BUS;
     END IF;
 
-    -- Inserta en la bitacora de auditoria usando la secuencia
+    -- Esta parte del código se encarga de guardar el cambio en la auditoria con su correlativo.
     INSERT INTO LEHZ_AUDITORIA (
 	ID_AUDITORIA, TABLA_AFECTADA, OPERACION, ID_REGISTRO, DETALLE, USUARIO_BD, FECHA_EVENTO
     ) VALUES (

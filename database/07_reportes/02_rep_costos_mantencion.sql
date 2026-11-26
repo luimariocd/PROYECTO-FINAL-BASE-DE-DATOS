@@ -1,8 +1,6 @@
 ALTER SESSION SET CURRENT_SCHEMA = LEHZ;
 
--- ============================================================================
--- REPORTE 02: COSTOS DE MANTENCION POR EMPRESA Y BUS
--- ============================================================================
+-- Esta parte del código se encarga de calcular costos de mantencion por empresa y bus.
 CREATE OR REPLACE PROCEDURE LEHZ_PS_REP_COSTOS_MANTENCION(
     p_cursor OUT SYS_REFCURSOR
 ) IS

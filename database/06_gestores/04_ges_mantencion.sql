@@ -1,8 +1,6 @@
 ALTER SESSION SET CURRENT_SCHEMA = LEHZ;
 
--- ============================================================================
--- GESTOR 04: REGISTRO DE MANTENCIONES
--- ============================================================================
+-- Esta parte del código se encarga de registrar mantenciones de buses.
 CREATE OR REPLACE PROCEDURE LEHZ_PS_GES_REGISTRAR_MANTENCION(
     p_fecha        IN DATE,
     p_descripcion  IN VARCHAR2,

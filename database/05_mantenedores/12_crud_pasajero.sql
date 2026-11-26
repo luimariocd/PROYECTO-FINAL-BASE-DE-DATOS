@@ -1,8 +1,6 @@
 ALTER SESSION SET CURRENT_SCHEMA = LEHZ;
 
--- ============================================================================
--- MANTENEDOR 12: PASAJEROS
--- ============================================================================
+-- Esta parte del código se encarga de crear el mantenedor de pasajeros.
 CREATE OR REPLACE PROCEDURE LEHZ_PS_IUD_PASAJERO(
     p_opcion      IN VARCHAR2,
     p_rut         IN VARCHAR2,

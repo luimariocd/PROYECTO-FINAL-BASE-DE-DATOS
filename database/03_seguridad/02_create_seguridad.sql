@@ -34,7 +34,7 @@ CREATE TABLE LEHZ_AUDITORIA (
     CONSTRAINT PK_LEHZ_AUDITORIA PRIMARY KEY (ID_AUDITORIA)
 );
 
--- DATOS DE PRUEBA
+-- Esta parte del código se encarga de cargar los roles de prueba.
 
 INSERT INTO LEHZ_ROL (ID_ROL, NOMBRE_ROL, DESCRIPCION_ROL)
 VALUES (LEHZ_SEQ_ROL.NEXTVAL, 'ADMINISTRADOR', 'Acceso total a mantenedores, gestores, reportes y seguridad');
@@ -45,7 +45,7 @@ VALUES (LEHZ_SEQ_ROL.NEXTVAL, 'VENDEDOR', 'Acceso a venta de boletos, pagos y co
 INSERT INTO LEHZ_ROL (ID_ROL, NOMBRE_ROL, DESCRIPCION_ROL)
 VALUES (LEHZ_SEQ_ROL.NEXTVAL, 'OPERACIONES', 'Acceso a gestion de flota, viajes, conductores y mantenciones');
 
--- Usuarios iniciales (clave encriptada con SHA256)
+-- Esta parte del código se encarga de crear los usuarios iniciales con clave SHA256.
 INSERT INTO LEHZ_USUARIO (ID_USUARIO, USERNAME, PASSWORD_HASH, NOMBRE_COMPLETO, EMAIL, ESTADO, ID_ROL)
 VALUES (
     LEHZ_SEQ_USUARIO.NEXTVAL,
@@ -79,7 +79,7 @@ VALUES (
     3
 );
 
--- ==================== [NUEVO] USUARIO ADMINISTRADOR DENUNCE ====================
+-- Esta parte del código se encarga de crear el usuario administrador del sistema.
 INSERT INTO LEHZ_USUARIO (ID_USUARIO, USERNAME, PASSWORD_HASH, NOMBRE_COMPLETO, EMAIL, ESTADO, ID_ROL)
 VALUES (
     LEHZ_SEQ_USUARIO.NEXTVAL,
@@ -90,11 +90,10 @@ VALUES (
     'ACTIVO',
     1
 );
--- ===============================================================================
 
 COMMIT;
 
--- CONTROL DE ACCESO
+-- Esta parte del código se encarga de crear el paquete de control de acceso.
 
 CREATE OR REPLACE PACKAGE LEHZ_PKG_SEGURIDAD AS
     FUNCTION FN_VALIDAR_LOGIN(
@@ -224,7 +223,7 @@ CREATE OR REPLACE PACKAGE BODY LEHZ_PKG_SEGURIDAD AS
 END LEHZ_PKG_SEGURIDAD;
 /
 
--- ==================== [NUEVO] WRAPPERS DE LOGIN Y ROLES PARA PHP ================
+-- Esta parte del código se encarga de exponer login y roles para que PHP los consuma.
 CREATE OR REPLACE PROCEDURE LEHZ_PS_LOGIN(
     p_username IN  VARCHAR2,
     p_password IN  VARCHAR2,
@@ -311,9 +310,8 @@ EXCEPTION
         RAISE;
 END LEHZ_PS_CAMBIAR_ESTADO_USUARIO;
 /
--- ===============================================================================
 
--- ==================== [NUEVO] POLITICA DE CONTRASENA ROBUSTA Y PRIVILEGIOS =======
+-- Esta parte del código se encarga de validar contraseñas robustas y privilegios.
 CREATE OR REPLACE FUNCTION LEHZ_FN_VALIDAR_PASSWORD (
     p_password IN VARCHAR2
 ) RETURN VARCHAR2 IS
@@ -375,8 +373,7 @@ BEGIN
         RETURN;
     END IF;
 
-    -- Solo un ADMINISTRADOR puede crear cuentas con privilegios superiores.
-    -- Un formulario publico siempre crea VENDEDOR.
+    -- Esta parte del código se encarga de permitir solo al ADMINISTRADOR crear cuentas con mas privilegios.
     IF UPPER(NVL(p_rol_ejecutor, 'PUBLICO')) <> 'ADMINISTRADOR' THEN
         v_rol_final := 'VENDEDOR';
     ELSE
@@ -418,11 +415,8 @@ EXCEPTION
         p_mensaje := 'No se pudo registrar el usuario: ' || SQLERRM;
 END;
 /
--- =================================================================================
 
--- ----------------------------------------------------------------------------
--- Registro publico: el confirmante de contrasena tambien se valida en Oracle.
--- ----------------------------------------------------------------------------
+-- Esta parte del código se encarga de validar en Oracle la confirmacion de contrasena.
 CREATE OR REPLACE PROCEDURE LEHZ_PS_REGISTRAR_PUBLICO (
     p_username           IN  VARCHAR2,
     p_password           IN  VARCHAR2,
@@ -447,9 +441,7 @@ BEGIN
 END LEHZ_PS_REGISTRAR_PUBLICO;
 /
 
--- ----------------------------------------------------------------------------
--- Alta de usuarios desde el modulo de seguridad (solo administradores).
--- ----------------------------------------------------------------------------
+-- Esta parte del código se encarga de permitir crear usuarios solo a administradores.
 CREATE OR REPLACE PROCEDURE LEHZ_PS_CREAR_USUARIO_ADMIN (
     p_username         IN  VARCHAR2,
     p_password         IN  VARCHAR2,
@@ -475,9 +467,7 @@ BEGIN
 END LEHZ_PS_CREAR_USUARIO_ADMIN;
 /
 
--- ----------------------------------------------------------------------------
--- Menu autorizado por rol. La interfaz solo dibuja lo que Oracle autoriza.
--- ----------------------------------------------------------------------------
+-- Esta parte del código se encarga de entregar el menu autorizado segun el rol.
 CREATE OR REPLACE VIEW LEHZ_VW_MENU_ROL AS
 WITH MODULOS AS (
     SELECT 'dashboard' AS CODIGO, 'Panel' AS ETIQUETA, 'PRINCIPAL' AS GRUPO, 1 AS ORDEN,

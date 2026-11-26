@@ -1,11 +1,7 @@
--- ============================================================================
--- [02_1] NORMALIZACION DE TEXTOS Y VALIDACION CHILENA (RUT, TELEFONO, PATENTE)
--- ============================================================================
+-- Esta parte del código se encarga de normalizar textos y validar RUT, telefono y patente.
 ALTER SESSION SET CURRENT_SCHEMA = LEHZ;
 
--- ----------------------------------------------------------------------------
--- 1. Normalizacion de textos (primera letra de cada palabra en mayuscula)
--- ----------------------------------------------------------------------------
+-- Esta parte del código se encarga de poner mayuscula la primera letra de cada palabra.
 CREATE OR REPLACE FUNCTION LEHZ_FN_NORMALIZAR_TEXTO (
     p_texto IN VARCHAR2
 ) RETURN VARCHAR2 DETERMINISTIC IS
@@ -17,12 +13,7 @@ BEGIN
 END;
 /
 
--- ----------------------------------------------------------------------------
--- 2. Normalizacion y validacion de RUT chileno (Modulo 11)
---    Acepta RUT con o sin digito verificador y con o sin puntos.
---    Si viene sin DV (7 u 8 digitos), lo calcula automaticamente.
---    p_tipo_entidad: PERSONA (< 50.000.000) o EMPRESA (>= 50.000.000)
--- ----------------------------------------------------------------------------
+-- Esta parte del código se encarga de normalizar y validar el RUT con modulo 11.
 CREATE OR REPLACE FUNCTION LEHZ_FN_NORMALIZAR_RUT (
     p_rut          IN VARCHAR2,
     p_tipo_entidad IN VARCHAR2
@@ -48,10 +39,6 @@ BEGIN
         RAISE_APPLICATION_ERROR(-20010, 'RUT invalido: debe tener 7 u 8 digitos mas su digito verificador (ej. 12.345.678-K).');
     END IF;
 
-    -- Casos:
-    --   Con guion: el ultimo caracter es el DV.
-    --   Sin guion y 9 caracteres: los primeros 8 son el cuerpo y el ultimo el DV.
-    --   Sin guion y 7 u 8 caracteres: el usuario no ingreso DV; se calcula.
     IF INSTR(v_original, '-') > 0 OR SUBSTR(v_clean, -1, 1) = 'K' THEN
         v_cuerpo := SUBSTR(v_clean, 1, LENGTH(v_clean) - 1);
         v_dv_ing := SUBSTR(v_clean, -1, 1);
@@ -79,7 +66,7 @@ BEGIN
         RAISE_APPLICATION_ERROR(-20010, 'RUT invalido para empresa: debe ser igual o superior a 50.000.000.');
     END IF;
 
-    -- Calculo Modulo 11
+    -- Esta parte del código se encarga de calcular el digito verificador con modulo 11.
     FOR i IN REVERSE 1..LENGTH(v_cuerpo) LOOP
         v_suma := v_suma + (TO_NUMBER(SUBSTR(v_cuerpo, i, 1)) * v_mult);
         v_mult := CASE WHEN v_mult = 7 THEN 2 ELSE v_mult + 1 END;
@@ -96,7 +83,7 @@ BEGIN
 END;
 /
 
--- Compatibilidad con el nombre anterior usado por otros scripts.
+-- Esta parte del código se encarga de mantener el nombre que usaban los scripts anteriores.
 CREATE OR REPLACE FUNCTION LEHZ_FN_VALIDAR_RUT_CL (
     p_rut          IN VARCHAR2,
     p_tipo_entidad IN VARCHAR2
@@ -106,13 +93,7 @@ BEGIN
 END;
 /
 
--- ----------------------------------------------------------------------------
--- 3. Normalizacion y validacion de telefono chileno
---    PERSONA: acepta 9XXXXXXXX o +569XXXXXXXX y devuelve +569XXXXXXXX.
---    EMPRESA: acepta 2XXXXXXXX .. 9XXXXXXXX y antepone +56;
---             tambien acepta los prefijos nacionales 600XXXXXX y 809XXXXXX.
---    Los separadores (espacios, puntos, parentesis, guiones) se eliminan.
--- ----------------------------------------------------------------------------
+-- Esta parte del código se encarga de normalizar y validar el telefono chileno.
 CREATE OR REPLACE FUNCTION LEHZ_FN_VALIDAR_TEL_CL (
     p_telefono     IN VARCHAR2,
     p_tipo_entidad IN VARCHAR2
@@ -140,7 +121,7 @@ BEGIN
             RAISE_APPLICATION_ERROR(-20011, 'Telefono personal invalido: debe tener formato movil chileno +569 seguido de 8 digitos (ej. +56912345678).');
         END IF;
     ELSE
-        -- Los numeros 600 y 809 son nacionales y NO llevan +56.
+        -- Esta parte del código se encarga de aceptar 600 y 809 sin el prefijo +56.
         IF LENGTH(v_digits) = 9 AND SUBSTR(v_digits, 1, 3) IN ('600', '809') THEN
             v_tel := v_digits;
         ELSIF LENGTH(v_digits) = 9 AND SUBSTR(v_digits, 1, 1) BETWEEN '2' AND '9' THEN
@@ -161,11 +142,7 @@ BEGIN
 END;
 /
 
--- ----------------------------------------------------------------------------
--- 4. Normalizacion y validacion de patente chilena
---    Nueva: 4 letras sin vocales + 2 digitos (ej. BCDF12)
---    Antigua: 2 letras + 4 digitos (ej. AB1234)
--- ----------------------------------------------------------------------------
+-- Esta parte del código se encarga de normalizar y validar la patente chilena.
 CREATE OR REPLACE FUNCTION LEHZ_FN_NORMALIZAR_PATENTE (
     p_patente IN VARCHAR2
 ) RETURN VARCHAR2 IS
@@ -185,9 +162,7 @@ BEGIN
 END;
 /
 
--- ----------------------------------------------------------------------------
--- 5. Triggers de normalizacion y validacion por tabla
--- ----------------------------------------------------------------------------
+-- Esta parte del código se encarga de aplicar los triggers de normalizacion por tabla.
 CREATE OR REPLACE TRIGGER LEHZ_TRG_NORM_VAL_USUARIO
 BEFORE INSERT OR UPDATE OF NOMBRE_COMPLETO ON LEHZ_USUARIO
 FOR EACH ROW

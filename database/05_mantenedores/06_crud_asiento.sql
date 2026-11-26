@@ -1,8 +1,6 @@
 ALTER SESSION SET CURRENT_SCHEMA = LEHZ;
 
--- ============================================================================
--- MANTENEDOR 06: ASIENTOS
--- ============================================================================
+-- Esta parte del código se encarga de crear el mantenedor de asientos.
 CREATE OR REPLACE PROCEDURE LEHZ_PS_IUD_ASIENTO(
     p_opcion      IN VARCHAR2,
     p_nro_asiento IN NUMBER,

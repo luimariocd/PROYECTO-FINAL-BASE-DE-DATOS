@@ -1,10 +1,6 @@
 ALTER SESSION SET CURRENT_SCHEMA = LEHZ;
 
--- ============================================================================
--- CARGA DE DATOS DE PRUEBA
--- Todos los identificadores usan las secuencias para no chocar con los
--- mantenedores. Las fechas de viaje son futuras y las mantenciones pasadas.
--- ============================================================================
+-- Esta parte del código se encarga de cargar datos reales de prueba.
 DECLARE
     v_region_maule   NUMBER := LEHZ_SEQ_REGION.NEXTVAL;
     v_region_rm      NUMBER := LEHZ_SEQ_REGION.NEXTVAL;
@@ -46,7 +42,7 @@ DECLARE
     v_boleto         NUMBER;
     v_tarifa         NUMBER;
 
-    -- Procedimiento local para emitir un boleto con su pago y bajada.
+    -- Esta parte del código se encarga de emitir boletos con pago y bajada.
     PROCEDURE crear_boleto(
         p_rut       IN VARCHAR2,
         p_viaje     IN NUMBER,
@@ -90,7 +86,7 @@ DECLARE
         END IF;
     END;
 BEGIN
-    -- 1. Regiones y comunas
+    -- Esta parte del código se encarga de cargar regiones y comunas.
     INSERT INTO LEHZ_REGION (ID_REGION, NOMBRE_REGION) VALUES (v_region_maule, 'Region del Maule');
     INSERT INTO LEHZ_REGION (ID_REGION, NOMBRE_REGION) VALUES (v_region_rm, 'Region Metropolitana');
     INSERT INTO LEHZ_REGION (ID_REGION, NOMBRE_REGION) VALUES (v_region_nuble, 'Region de Nuble');
@@ -102,7 +98,7 @@ BEGIN
     INSERT INTO LEHZ_COMUNA (ID_COMUNA, NOMBRE_COMUNA, ID_REGION) VALUES (v_com_chillan, 'Chillan', v_region_nuble);
     INSERT INTO LEHZ_COMUNA (ID_COMUNA, NOMBRE_COMUNA, ID_REGION) VALUES (v_com_molina, 'Molina', v_region_maule);
 
-    -- 2. Terminales
+    -- Esta parte del código se encarga de cargar terminales.
     INSERT INTO LEHZ_TERMINAL (ID_TERMINAL, NOMBRE, CALLE, NUMERO, ID_COMUNA)
     VALUES (v_term_talca, 'Terminal Lorenzo Varoli', '2 Sur', 1920, v_com_talca);
     INSERT INTO LEHZ_TERMINAL (ID_TERMINAL, NOMBRE, CALLE, NUMERO, ID_COMUNA)
@@ -116,7 +112,7 @@ BEGIN
     INSERT INTO LEHZ_TERMINAL (ID_TERMINAL, NOMBRE, CALLE, NUMERO, ID_COMUNA)
     VALUES (v_term_molina, 'Terminal de Molina', 'Calle Urmeneta', 45, v_com_molina);
 
-    -- 3. Empresas (telefonos +56, 809 y 600)
+    -- Esta parte del código se encarga de cargar empresas con sus telefonos.
     INSERT INTO LEHZ_EMPRESA (RUT_EMPRESA, RAZON_SOCIAL, TELEFONO_EMPRESA, CORREO_ELECTRONICO_EMPRESA)
     VALUES ('76123456-0', 'Buses Talca Paris y Londres', '+56712234455', 'contacto@tpl.cl');
     INSERT INTO LEHZ_EMPRESA (RUT_EMPRESA, RAZON_SOCIAL, TELEFONO_EMPRESA, CORREO_ELECTRONICO_EMPRESA)
@@ -124,7 +120,7 @@ BEGIN
     INSERT INTO LEHZ_EMPRESA (RUT_EMPRESA, RAZON_SOCIAL, TELEFONO_EMPRESA, CORREO_ELECTRONICO_EMPRESA)
     VALUES ('76543210-3', 'Transportes Cordillera', '600987654', 'ventas@cordillera.cl');
 
-    -- 4. Buses
+    -- Esta parte del código se encarga de cargar buses.
     INSERT INTO LEHZ_BUS (PATENTE_BUS, MARCA, MODELO, ANIO_FABRICACION, CAPACIDAD, TIPO_SERVICIO, CANTIDAD_PISOS, TARIFA_BASE, RUT_EMPRESA)
     VALUES ('BCDF12', 'Mercedes-Benz', 'Paradiso 1200', 2023, 44, 'SALON CAMA', 1, 8000, '76123456-0');
     INSERT INTO LEHZ_BUS (PATENTE_BUS, MARCA, MODELO, ANIO_FABRICACION, CAPACIDAD, TIPO_SERVICIO, CANTIDAD_PISOS, TARIFA_BASE, RUT_EMPRESA)
@@ -132,7 +128,7 @@ BEGIN
     INSERT INTO LEHZ_BUS (PATENTE_BUS, MARCA, MODELO, ANIO_FABRICACION, CAPACIDAD, TIPO_SERVICIO, CANTIDAD_PISOS, TARIFA_BASE, RUT_EMPRESA)
     VALUES ('HJKL34', 'Scania', 'Irizar i6', 2022, 40, 'NORMAL', 1, 9500, '76543210-3');
 
-    -- 5. Asientos (la ubicacion 2+2 la valida el trigger; se declara explicita)
+    -- Esta parte del código se encarga de cargar asientos con ubicacion 2+2.
     FOR i IN 1..12 LOOP
         INSERT INTO LEHZ_ASIENTO (NUMERO_ASIENTO, PATENTE_BUS, PISO, UBICACION)
         VALUES (i, 'BCDF12', 1,
@@ -152,7 +148,7 @@ BEGIN
                 CASE WHEN MOD(i - 1, 4) IN (0, 3) THEN 'VENTANA' ELSE 'PASILLO' END);
     END LOOP;
 
-    -- 6. Conductores y mecanicos
+    -- Esta parte del código se encarga de cargar conductores y mecanicos.
     INSERT INTO LEHZ_CONDUCTOR (RUT_CONDUCTOR, NOMBRE_CONDUCTOR, APELLIDO1_CONDUCTOR, APELLIDO2_CONDUCTOR, TELEFONO, TIPO_LICENCIA, VENCIMIENTO_LICENCIA, RUT_EMPRESA)
     VALUES ('15432198-5', 'Carlos', 'Munoz', 'Rojas', '+56987654321', 'A3', DATE '2028-05-15', '76123456-0');
     INSERT INTO LEHZ_CONDUCTOR (RUT_CONDUCTOR, NOMBRE_CONDUCTOR, APELLIDO1_CONDUCTOR, APELLIDO2_CONDUCTOR, TELEFONO, TIPO_LICENCIA, VENCIMIENTO_LICENCIA, RUT_EMPRESA)
@@ -169,7 +165,7 @@ BEGIN
     INSERT INTO LEHZ_MECANICO (RUT_MECANICO, NOMBRE_MECANICO, APELLIDO1_MECANICO, APELLIDO2_MECANICO, TELEFONO, ESPECIALIDAD, RUT_EMPRESA)
     VALUES ('13987654-7', 'Raul', 'Fuentes', 'Diaz', '+56944445555', 'Frenos y Suspension', '76543210-3');
 
-    -- 7. Pasajeros
+    -- Esta parte del código se encarga de cargar pasajeros.
     INSERT INTO LEHZ_PASAJERO (RUT_PASAJERO, NOMBRE_PASAJERO, APELLIDO1_PASAJERO, APELLIDO2_PASAJERO, TELEFONO, CORREO_ELECTRONICO_PASAJERO)
     VALUES ('19111222-9', 'Maria', 'Fernandez', 'Lopez', '+56954321098', 'maria.f@correo.cl');
     INSERT INTO LEHZ_PASAJERO (RUT_PASAJERO, NOMBRE_PASAJERO, APELLIDO1_PASAJERO, APELLIDO2_PASAJERO, TELEFONO, CORREO_ELECTRONICO_PASAJERO)
@@ -187,7 +183,7 @@ BEGIN
     INSERT INTO LEHZ_PASAJERO (RUT_PASAJERO, NOMBRE_PASAJERO, APELLIDO1_PASAJERO, APELLIDO2_PASAJERO, TELEFONO, CORREO_ELECTRONICO_PASAJERO)
     VALUES ('18765432-7', 'Felipe', 'Castro', 'Rivas', '+56966665555', 'felipe.c@correo.cl');
 
-    -- 8. Rutas y paradas
+    -- Esta parte del código se encarga de cargar rutas y paradas.
     INSERT INTO LEHZ_RUTA (ID_RUTA, HORARIO, DISTANCIA, HORAS_ESTIMADAS, MINUTOS_ESTIMADOS, NOMBRE_RUTA, ID_TERMINAL_ORIGEN, ID_TERMINAL_DESTINO)
     VALUES (v_ruta1, TIMESTAMP '2026-12-01 08:00:00', 255, 3, 15, 'Talca - Santiago', v_term_talca, v_term_santiago);
     INSERT INTO LEHZ_RUTA (ID_RUTA, HORARIO, DISTANCIA, HORAS_ESTIMADAS, MINUTOS_ESTIMADOS, NOMBRE_RUTA, ID_TERMINAL_ORIGEN, ID_TERMINAL_DESTINO)
@@ -227,7 +223,7 @@ BEGIN
     INSERT INTO LEHZ_RUTA_PARADA (ID_RUTA_PARADA, ID_RUTA, ID_TERMINAL, ORDEN_PARADA, MINUTOS_DESDE_ORIG, PERMITE_BAJADA)
     VALUES (LEHZ_SEQ_RUTA_PARADA.NEXTVAL, v_ruta4, v_term_chillan, 3, 120, 'S');
 
-    -- 9. Horarios
+    -- Esta parte del código se encarga de cargar horarios.
     INSERT INTO LEHZ_HORARIO (ID_HORARIO, HORARIO, HORA_SALIDA, HORA_LLEGADA)
     VALUES (v_horario1, 101, TIMESTAMP '2026-12-01 08:00:00', TIMESTAMP '2026-12-01 11:15:00');
     INSERT INTO LEHZ_HORARIO (ID_HORARIO, HORARIO, HORA_SALIDA, HORA_LLEGADA)
@@ -241,7 +237,7 @@ BEGIN
     INSERT INTO LEHZ_HORARIO (ID_HORARIO, HORARIO, HORA_SALIDA, HORA_LLEGADA)
     VALUES (v_horario6, 106, TIMESTAMP '2026-12-04 18:00:00', TIMESTAMP '2026-12-04 18:55:00');
 
-    -- 10. Viajes futuros
+    -- Esta parte del código se encarga de cargar viajes futuros.
     INSERT INTO LEHZ_VIAJE (ID_VIAJE, FECHA_VIAJE, ID_HORARIO, ID_RUTA)
     VALUES (v_viaje1, DATE '2026-12-01', v_horario1, v_ruta1);
     INSERT INTO LEHZ_VIAJE (ID_VIAJE, FECHA_VIAJE, ID_HORARIO, ID_RUTA)
@@ -255,7 +251,7 @@ BEGIN
     INSERT INTO LEHZ_VIAJE (ID_VIAJE, FECHA_VIAJE, ID_HORARIO, ID_RUTA)
     VALUES (v_viaje6, DATE '2026-12-04', v_horario6, v_ruta2);
 
-    -- 11. Asignaciones bus/conductor
+    -- Esta parte del código se encarga de asignar buses y conductores a viajes.
     INSERT INTO LEHZ_CONDUCE (RUT_CONDUCTOR, PATENTE_BUS, ID_VIAJE) VALUES ('15432198-5', 'BCDF12', v_viaje1);
     INSERT INTO LEHZ_CONDUCE (RUT_CONDUCTOR, PATENTE_BUS, ID_VIAJE) VALUES ('11111112-K', 'XY9876', v_viaje2);
     INSERT INTO LEHZ_CONDUCE (RUT_CONDUCTOR, PATENTE_BUS, ID_VIAJE) VALUES ('13456789-9', 'HJKL34', v_viaje3);
@@ -263,7 +259,7 @@ BEGIN
     INSERT INTO LEHZ_CONDUCE (RUT_CONDUCTOR, PATENTE_BUS, ID_VIAJE) VALUES ('14555666-K', 'XY9876', v_viaje5);
     INSERT INTO LEHZ_CONDUCE (RUT_CONDUCTOR, PATENTE_BUS, ID_VIAJE) VALUES ('13456789-9', 'HJKL34', v_viaje6);
 
-    -- 12. Terminales utilizados por cada empresa
+    -- Esta parte del código se encarga de asociar terminales a empresas.
     INSERT INTO LEHZ_UTILIZAN (ID_TERMINAL, RUT_EMPRESA) VALUES (v_term_talca, '76123456-0');
     INSERT INTO LEHZ_UTILIZAN (ID_TERMINAL, RUT_EMPRESA) VALUES (v_term_santiago, '76123456-0');
     INSERT INTO LEHZ_UTILIZAN (ID_TERMINAL, RUT_EMPRESA) VALUES (v_term_curico, '76987654-5');
@@ -272,39 +268,39 @@ BEGIN
     INSERT INTO LEHZ_UTILIZAN (ID_TERMINAL, RUT_EMPRESA) VALUES (v_term_sanjavier, '76543210-3');
     INSERT INTO LEHZ_UTILIZAN (ID_TERMINAL, RUT_EMPRESA) VALUES (v_term_santiago, '76543210-3');
 
-    -- 13. Boletos, pagos y bajadas (viaje 1: Talca - Santiago, bus BCDF12)
+    -- Esta parte del código se encarga de emitir boletos con pago y bajada del viaje 1.
     crear_boleto('19111222-9', v_viaje1, 1, 'BCDF12', 'EFECTIVO', v_term_santiago);
     crear_boleto('20333444-3', v_viaje1, 2, 'BCDF12', 'TARJETA', v_term_curico);
     crear_boleto('17654321-3', v_viaje1, 3, 'BCDF12', 'EFECTIVO', v_term_molina);
     crear_boleto('19888777-3', v_viaje1, 4, 'BCDF12', 'TRANSFERENCIA', NULL);
     crear_boleto('19111222-9', v_viaje1, 5, 'BCDF12', NULL, NULL, 'ANULADO', 'Prueba de anulacion');
 
-    -- Viaje 2: Talca - Curico, bus XY9876
+    -- Esta parte del código se encarga de emitir boletos del viaje 2.
     crear_boleto('21000111-5', v_viaje2, 1, 'XY9876', 'EFECTIVO', v_term_curico);
     crear_boleto('12345678-5', v_viaje2, 2, 'XY9876', 'TARJETA', NULL);
     crear_boleto('11222333-9', v_viaje2, 3, 'XY9876', 'TRANSFERENCIA', NULL);
     crear_boleto('18765432-7', v_viaje2, 9, 'XY9876', 'EFECTIVO', NULL);
 
-    -- Viaje 3: Santiago - Talca, bus HJKL34
+    -- Esta parte del código se encarga de emitir boletos del viaje 3.
     crear_boleto('19111222-9', v_viaje3, 5, 'HJKL34', 'TARJETA', NULL);
     crear_boleto('20333444-3', v_viaje3, 6, 'HJKL34', 'EFECTIVO', v_term_curico);
     crear_boleto('12345678-5', v_viaje3, 7, 'HJKL34', 'TRANSFERENCIA', v_term_molina);
 
-    -- Viaje 4: Talca - Chillan, bus BCDF12
+    -- Esta parte del código se encarga de emitir boletos del viaje 4.
     crear_boleto('17654321-3', v_viaje4, 7, 'BCDF12', 'EFECTIVO', v_term_sanjavier);
     crear_boleto('19888777-3', v_viaje4, 8, 'BCDF12', 'TARJETA', NULL);
     crear_boleto('21000111-5', v_viaje4, 9, 'BCDF12', 'TRANSFERENCIA', NULL);
 
-    -- Viaje 5: Talca - Santiago, bus XY9876
+    -- Esta parte del código se encarga de emitir boletos del viaje 5.
     crear_boleto('12345678-5', v_viaje5, 10, 'XY9876', 'EFECTIVO', v_term_curico);
     crear_boleto('11222333-9', v_viaje5, 11, 'XY9876', 'TARJETA', NULL);
     crear_boleto('18765432-7', v_viaje5, 12, 'XY9876', 'EFECTIVO', v_term_molina);
 
-    -- Viaje 6: Talca - Curico, bus HJKL34
+    -- Esta parte del código se encarga de emitir boletos del viaje 6.
     crear_boleto('18765432-7', v_viaje6, 1, 'HJKL34', 'EFECTIVO', NULL);
     crear_boleto('19111222-9', v_viaje6, 2, 'HJKL34', 'TRANSFERENCIA', NULL);
 
-    -- 14. Mantenciones (pasadas y en buses sin viaje ese dia)
+    -- Esta parte del código se encarga de cargar mantenciones pasadas sin viajes asignados.
     INSERT INTO LEHZ_MANTENCION (ID_MANTENCION, FECHA_MANTENCION, DESCRIPCION_MANTENCION, COSTO_MANTENCION, RUT_MECANICO, PATENTE_BUS)
     VALUES (LEHZ_SEQ_MANTENCION.NEXTVAL, DATE '2026-11-10', 'Cambio de aceite y filtros', 185000, '14222333-3', 'BCDF12');
     INSERT INTO LEHZ_MANTENCION (ID_MANTENCION, FECHA_MANTENCION, DESCRIPCION_MANTENCION, COSTO_MANTENCION, RUT_MECANICO, PATENTE_BUS)

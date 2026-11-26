@@ -1,8 +1,6 @@
 ALTER SESSION SET CURRENT_SCHEMA = LEHZ;
 
--- ============================================================================
--- MANTENEDOR 08: MECANICOS
--- ============================================================================
+-- Esta parte del código se encarga de crear el mantenedor de mecanicos.
 CREATE OR REPLACE PROCEDURE LEHZ_PS_IUD_MECANICO(
     p_opcion       IN VARCHAR2,
     p_rut          IN VARCHAR2,

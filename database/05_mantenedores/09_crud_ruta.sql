@@ -1,8 +1,6 @@
 ALTER SESSION SET CURRENT_SCHEMA = LEHZ;
 
--- ============================================================================
--- MANTENEDOR 09: RUTAS
--- ============================================================================
+-- Esta parte del código se encarga de crear el mantenedor de rutas.
 CREATE OR REPLACE PROCEDURE LEHZ_PS_IUD_RUTA(
     p_opcion              IN VARCHAR2,
     p_id_ruta             IN OUT NUMBER,

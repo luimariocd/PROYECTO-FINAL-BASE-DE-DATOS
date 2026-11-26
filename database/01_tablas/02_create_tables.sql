@@ -1,9 +1,6 @@
 ALTER SESSION SET CURRENT_SCHEMA = LEHZ;
 
--- ============================================================================
--- TABLAS BASE DEL SISTEMA LEHZ
--- Orden de creacion respetando dependencias (3FN).
--- ============================================================================
+-- Esta parte del código se encarga de crear las tablas principales del sistema.
 
 CREATE TABLE LEHZ_REGION (
     ID_REGION      NUMBER NOT NULL,
@@ -12,7 +9,7 @@ CREATE TABLE LEHZ_REGION (
 );
 
 CREATE TABLE LEHZ_EMPRESA (
-    -- RUT con digito verificador (0-9/K) y telefono chileno (+56, 600 u 809)
+    -- Esta parte del código se encarga de validar el RUT y el telefono chileno.
     RUT_EMPRESA                VARCHAR2(12) NOT NULL,
     RAZON_SOCIAL               VARCHAR2(100),
     TELEFONO_EMPRESA           VARCHAR2(15),
@@ -118,7 +115,7 @@ CREATE TABLE LEHZ_BUS (
     CONSTRAINT CK_BUS_PISOS CHECK (CANTIDAD_PISOS IN (1, 2)),
     CONSTRAINT CK_BUS_TARIFA CHECK (TARIFA_BASE > 0),
     CONSTRAINT CK_BUS_CAPACIDAD CHECK (CAPACIDAD IS NULL OR CAPACIDAD > 0),
-    -- Patente nueva: 4 letras sin vocales + 2 digitos. Patente antigua: 2 letras + 4 digitos.
+    -- Esta parte del código se encarga de validar los dos formatos de patente permitidos.
     CONSTRAINT CK_BUS_PATENTE CHECK (REGEXP_LIKE(PATENTE_BUS, '^([B-DF-HJ-NP-TV-Z]{4}[0-9]{2}|[A-Z]{2}[0-9]{4})$'))
 );
 
@@ -196,7 +193,7 @@ CREATE TABLE LEHZ_BOLETO (
     CONSTRAINT CK_BOLETO_VALOR CHECK (VALOR_BOLETO >= 0)
 );
 
--- Un mismo asiento no puede tener dos boletos activos en el mismo viaje/bus.
+-- Esta parte del código se encarga de impedir dos boletos activos en el mismo asiento y viaje.
 CREATE UNIQUE INDEX UQ_LEHZ_BOLETO_ASIENTO_ACTIVO ON LEHZ_BOLETO (
     CASE WHEN ESTADO IN ('EMITIDO', 'USADO') THEN ID_VIAJE END,
     CASE WHEN ESTADO IN ('EMITIDO', 'USADO') THEN PATENTE_BUS END,
@@ -220,9 +217,7 @@ CREATE TABLE LEHZ_PAGO (
     CONSTRAINT CK_PAGO_METODO CHECK (METODO_PAGO IN ('EFECTIVO', 'TARJETA', 'TRANSFERENCIA'))
 );
 
--- ============================================================================
--- PARADAS INTERMEDIAS Y BAJADA INDEPENDIENTE
--- ============================================================================
+-- Esta parte del código se encarga de crear paradas intermedias y bajadas independientes.
 CREATE TABLE LEHZ_RUTA_PARADA (
     ID_RUTA_PARADA     NUMBER NOT NULL,
     ID_RUTA            NUMBER NOT NULL,
@@ -252,10 +247,7 @@ CREATE TABLE LEHZ_PASAJE_BAJADA (
     CONSTRAINT FK_LEHZ_PB_TERMINAL FOREIGN KEY (ID_TERMINAL_BAJADA) REFERENCES LEHZ_TERMINAL (ID_TERMINAL)
 );
 
--- ============================================================================
--- RESTRICCIONES DE FORMATO CHILENO (RUT Y TELEFONOS)
--- La normalizacion/validacion definitiva se realiza en triggers (04_triggers).
--- ============================================================================
+-- Esta parte del código se encarga de aplicar restricciones de formato a RUT y telefono.
 ALTER TABLE LEHZ_EMPRESA
 ADD CONSTRAINT CK_EMPRESA_RUT CHECK (REGEXP_LIKE(RUT_EMPRESA, '^[5-9][0-9]{7}-[0-9K]$'));
 
@@ -268,7 +260,7 @@ ADD CONSTRAINT CK_MECANICO_RUT CHECK (REGEXP_LIKE(RUT_MECANICO, '^[1-4]?[0-9]{7}
 ALTER TABLE LEHZ_PASAJERO
 ADD CONSTRAINT CK_PASAJERO_RUT CHECK (REGEXP_LIKE(RUT_PASAJERO, '^[1-4]?[0-9]{7}-[0-9K]$'));
 
--- Telefono de empresa: +56 + 9 digitos, o numeros nacionales 600/809 de 9 digitos.
+-- Esta parte del código se encarga de validar el telefono de empresa segun su tipo.
 ALTER TABLE LEHZ_EMPRESA
 ADD CONSTRAINT CK_EMPRESA_TEL CHECK (
     TELEFONO_EMPRESA IS NULL OR REGEXP_LIKE(TELEFONO_EMPRESA, '^(\+56[2-9][0-9]{8}|600[0-9]{6}|809[0-9]{6})$')

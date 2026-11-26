@@ -1,15 +1,8 @@
 ALTER SESSION SET CURRENT_SCHEMA = LEHZ;
 
--- ============================================================================
--- GESTOR 01: VENTA, ANULACION Y CICLO DE VIDA DE BOLETOS
--- ============================================================================
+-- Esta parte del código se encarga de gestionar la venta, anulacion y ciclo de vida de boletos.
 
--- ----------------------------------------------------------------------------
--- Calculo de tarifa por bus y tramo.
--- La tarifa base del bus se prorratea por los minutos desde el origen hasta
--- la parada de bajada. Si no hay bajada o la bajada es el destino, se cobra
--- la tarifa completa.
--- ----------------------------------------------------------------------------
+-- Esta parte del código se encarga de calcular la tarifa segun el tramo recorrido.
 CREATE OR REPLACE FUNCTION LEHZ_FN_CALCULAR_TARIFA_BUS (
     p_id_viaje           IN NUMBER,
     p_patente_bus        IN VARCHAR2,
@@ -88,10 +81,7 @@ EXCEPTION
 END;
 /
 
--- ----------------------------------------------------------------------------
--- Venta de boleto: valida pasajero, viaje, bus asignado, asiento, capacidad,
--- calcula la tarifa en Oracle y registra pago y bajada independiente.
--- ----------------------------------------------------------------------------
+-- Esta parte del código se encarga de validar pasajero, viaje, bus, asiento y capacidad al vender.
 CREATE OR REPLACE PROCEDURE LEHZ_PS_GES_VENDER_BOLETO(
     p_rut_pasajero       IN VARCHAR2,
     p_id_viaje           IN NUMBER,
@@ -225,9 +215,7 @@ EXCEPTION
 END LEHZ_PS_GES_VENDER_BOLETO;
 /
 
--- ----------------------------------------------------------------------------
--- Anulacion con trazabilidad: no elimina el boleto ni su pago.
--- ----------------------------------------------------------------------------
+-- Esta parte del código se encarga de anular el boleto sin borrar el boleto ni su pago.
 CREATE OR REPLACE PROCEDURE LEHZ_PS_GES_ANULAR_BOLETO(
     p_id_boleto  IN NUMBER,
     p_motivo     IN VARCHAR2,
@@ -271,9 +259,7 @@ EXCEPTION
 END LEHZ_PS_GES_ANULAR_BOLETO;
 /
 
--- ----------------------------------------------------------------------------
--- Marca un boleto emitido como usado (control de ciclo de vida).
--- ----------------------------------------------------------------------------
+-- Esta parte del código se encarga de marcar como usado un boleto emitido.
 CREATE OR REPLACE PROCEDURE LEHZ_PS_GES_MARCAR_BOLETO_USADO(
     p_id_boleto  IN NUMBER,
     p_estado_out OUT VARCHAR2

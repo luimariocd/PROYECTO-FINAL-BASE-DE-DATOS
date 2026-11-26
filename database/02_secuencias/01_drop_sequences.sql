@@ -1,6 +1,6 @@
 ALTER SESSION SET CURRENT_SCHEMA = LEHZ;
 
--- Secuencias de entidades maestras y operacionales
+-- Esta parte del código se encarga de eliminar las secuencias de las entidades principales.
 DROP SEQUENCE LEHZ_SEQ_REGION;
 DROP SEQUENCE LEHZ_SEQ_COMUNA;
 DROP SEQUENCE LEHZ_SEQ_TERMINAL;
@@ -11,12 +11,11 @@ DROP SEQUENCE LEHZ_SEQ_MANTENCION;
 DROP SEQUENCE LEHZ_SEQ_BOLETO;
 DROP SEQUENCE LEHZ_SEQ_PAGO;
 
--- Secuencias de seguridad y auditoria
+-- Esta parte del código se encarga de eliminar las secuencias de seguridad y auditoria.
 DROP SEQUENCE LEHZ_SEQ_ROL;
 DROP SEQUENCE LEHZ_SEQ_USUARIO;
 DROP SEQUENCE LEHZ_SEQ_AUDITORIA;
 
--- ==================== [NUEVO] SECUENCIAS DE PARADAS Y BAJADAS ====================
+-- Esta parte del código se encarga de eliminar las secuencias de paradas y bajadas.
 DROP SEQUENCE LEHZ_SEQ_RUTA_PARADA;
 DROP SEQUENCE LEHZ_SEQ_PASAJE_BAJADA;
--- =================================================================================

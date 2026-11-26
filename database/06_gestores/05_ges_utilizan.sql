@@ -1,8 +1,6 @@
 ALTER SESSION SET CURRENT_SCHEMA = LEHZ;
 
--- ============================================================================
--- GESTOR 05: ASOCIACION TERMINAL - EMPRESA
--- ============================================================================
+-- Esta parte del código se encarga de asociar terminales con empresas.
 CREATE OR REPLACE PROCEDURE LEHZ_PS_GES_ASOCIAR_TERMINAL(
     p_id_terminal IN NUMBER,
     p_rut_empresa IN VARCHAR2,

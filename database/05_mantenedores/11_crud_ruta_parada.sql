@@ -1,8 +1,6 @@
 ALTER SESSION SET CURRENT_SCHEMA = LEHZ;
 
--- ============================================================================
--- MANTENEDOR 11: PARADAS INTERMEDIAS POR RUTA
--- ============================================================================
+-- Esta parte del código se encarga de crear el mantenedor de paradas por ruta.
 CREATE OR REPLACE PROCEDURE LEHZ_PS_IUD_RUTA_PARADA(
     p_opcion          IN VARCHAR2,
     p_id_ruta_parada  IN OUT NUMBER,

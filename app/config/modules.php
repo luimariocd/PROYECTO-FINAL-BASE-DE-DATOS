@@ -1,8 +1,5 @@
 <?php
-/**
- * Metadatos de presentacion. Las listas de valores, validaciones y permisos
- * viven en Oracle; aqui solo se describe como dibujar cada formulario.
- */
+// Esta parte del código se encarga de describir formularios; Oracle valida y autoriza.
 
 $maintainers = [
     'regiones' => [

@@ -1,4 +1,4 @@
--- Verificacion posterior a la migracion de LEHZTEST a LEHZ
+-- Esta parte del código se encarga de verificar el resultado de la migracion.
 SET PAGESIZE 200
 SET LINESIZE 250
 

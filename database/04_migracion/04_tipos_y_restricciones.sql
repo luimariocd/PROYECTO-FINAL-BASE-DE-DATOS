@@ -1,9 +1,9 @@
--- Ajuste final de tipos en LEHZ: equivalentes a LEHZTEST conservando datos de LEHZ
+-- Esta parte del código se encarga de ajustar tipos conservando los datos de LEHZ.
 SET DEFINE OFF
 SET SERVEROUTPUT ON SIZE UNLIMITED
 WHENEVER SQLERROR CONTINUE
 
--- 1. Quitar restricciones heredadas (los datos originales siguen en LEHZ_BAK_*)
+-- Esta parte del código se encarga de quitar restricciones heredadas; los datos quedan en LEHZ_BAK_*.
 BEGIN
   FOR r IN (SELECT table_name, constraint_name
               FROM user_constraints
@@ -18,7 +18,7 @@ BEGIN
 END;
 /
 
--- 2. Funcion temporal para calcular digito verificador de RUT
+-- Esta parte del código se encarga de crear una funcion temporal para calcular el digito del RUT.
 CREATE OR REPLACE FUNCTION LEHZ_FN_DV_TMP(p_rut IN VARCHAR2) RETURN VARCHAR2 IS
   v_sum NUMBER := 0;
   v_mul NUMBER := 2;
@@ -44,7 +44,7 @@ END;
 
 CREATE TABLE LEHZ_TMP_RUT_EMPRESA (OLD_RUT NUMBER, NEW_RUT VARCHAR2(12));
 
--- 3. EMPRESA: RUT numerico a VARCHAR2 con digito verificador; telefono a formato +56
+-- Esta parte del código se encarga de convertir el RUT y el telefono de empresa al formato requerido.
 ALTER TABLE LEHZ_EMPRESA ADD (RUT_EMPRESA_NEW VARCHAR2(12), TELEFONO_EMPRESA_NEW VARCHAR2(15));
 
 UPDATE LEHZ_EMPRESA
@@ -68,7 +68,7 @@ ALTER TABLE LEHZ_EMPRESA DROP COLUMN TELEFONO_EMPRESA;
 ALTER TABLE LEHZ_EMPRESA RENAME COLUMN RUT_EMPRESA_NEW TO RUT_EMPRESA;
 ALTER TABLE LEHZ_EMPRESA RENAME COLUMN TELEFONO_EMPRESA_NEW TO TELEFONO_EMPRESA;
 
--- 4. BUS: RUT empresa, marca y modelo
+-- Esta parte del código se encarga de ajustar el RUT de empresa, marca y modelo de buses.
 ALTER TABLE LEHZ_BUS ADD (RUT_EMPRESA_NEW VARCHAR2(12), MARCA_NEW VARCHAR2(30), MODELO_NEW VARCHAR2(30));
 
 UPDATE LEHZ_BUS b
@@ -83,7 +83,7 @@ ALTER TABLE LEHZ_BUS RENAME COLUMN RUT_EMPRESA_NEW TO RUT_EMPRESA;
 ALTER TABLE LEHZ_BUS RENAME COLUMN MARCA_NEW TO MARCA;
 ALTER TABLE LEHZ_BUS RENAME COLUMN MODELO_NEW TO MODELO;
 
--- 5. CONDUCTOR
+-- Esta parte del código se encarga de ajustar los datos de conductores.
 ALTER TABLE LEHZ_CONDUCTOR ADD (RUT_CONDUCTOR_NEW VARCHAR2(12), RUT_EMPRESA_NEW VARCHAR2(12));
 
 UPDATE LEHZ_CONDUCTOR c
@@ -95,7 +95,7 @@ ALTER TABLE LEHZ_CONDUCTOR DROP COLUMN RUT_EMPRESA;
 ALTER TABLE LEHZ_CONDUCTOR RENAME COLUMN RUT_CONDUCTOR_NEW TO RUT_CONDUCTOR;
 ALTER TABLE LEHZ_CONDUCTOR RENAME COLUMN RUT_EMPRESA_NEW TO RUT_EMPRESA;
 
--- 6. MECANICO
+-- Esta parte del código se encarga de ajustar los datos de mecanicos.
 ALTER TABLE LEHZ_MECANICO ADD (RUT_MECANICO_NEW VARCHAR2(12), RUT_EMPRESA_NEW VARCHAR2(12), ESPECIALIDAD_NEW VARCHAR2(40));
 
 UPDATE LEHZ_MECANICO m
@@ -110,7 +110,7 @@ ALTER TABLE LEHZ_MECANICO RENAME COLUMN RUT_MECANICO_NEW TO RUT_MECANICO;
 ALTER TABLE LEHZ_MECANICO RENAME COLUMN RUT_EMPRESA_NEW TO RUT_EMPRESA;
 ALTER TABLE LEHZ_MECANICO RENAME COLUMN ESPECIALIDAD_NEW TO ESPECIALIDAD;
 
--- 7. PASAJERO
+-- Esta parte del código se encarga de ajustar los datos de pasajeros.
 ALTER TABLE LEHZ_PASAJERO ADD (RUT_PASAJERO_NEW VARCHAR2(12), CORREO_NEW VARCHAR2(80));
 
 UPDATE LEHZ_PASAJERO
@@ -125,7 +125,7 @@ ALTER TABLE LEHZ_PASAJERO RENAME COLUMN CORREO_NEW TO CORREO_ELECTRONICO_PASAJER
 DROP TABLE LEHZ_TMP_RUT_EMPRESA PURGE;
 DROP FUNCTION LEHZ_FN_DV_TMP;
 
--- 8. Recrear todas las restricciones de usuario de LEHZTEST dentro de LEHZ
+-- Esta parte del código se encarga de recrear las restricciones de LEHZTEST dentro de LEHZ.
 BEGIN
   FOR r IN (SELECT constraint_name, table_name, constraint_type
               FROM all_constraints
@@ -161,7 +161,7 @@ BEGIN
 END;
 /
 
--- 9. Indices propios que no vienen dentro de una restriccion
+-- Esta parte del código se encarga de crear los indices que no dependen de restricciones.
 BEGIN
   FOR r IN (SELECT index_name FROM all_indexes
              WHERE owner='LEHZTEST' AND generated='N'
@@ -179,7 +179,7 @@ BEGIN
 END;
 /
 
--- 10. Recompilar objetos invalidos
+-- Esta parte del código se encarga de recompilar los objetos que quedaron invalidos.
 BEGIN
   FOR r IN (SELECT object_name, object_type FROM user_objects
              WHERE status='INVALID'

@@ -1,8 +1,6 @@
 ALTER SESSION SET CURRENT_SCHEMA = LEHZ;
 
--- ============================================================================
--- GESTOR 03: ASIGNACION DE CONDUCTOR, BUS Y VIAJE
--- ============================================================================
+-- Esta parte del código se encarga de asignar conductor y bus a un viaje.
 CREATE OR REPLACE PROCEDURE LEHZ_PS_GES_ASIGNAR_CONDUCE(
     p_rut_conductor IN VARCHAR2,
     p_patente_bus   IN VARCHAR2,

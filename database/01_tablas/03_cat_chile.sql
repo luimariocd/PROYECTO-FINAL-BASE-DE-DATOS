@@ -1,8 +1,6 @@
 ALTER SESSION SET CURRENT_SCHEMA = LEHZ;
 
--- ============================================================================
--- CATALOGO DE REGIONES DE CHILE (referencia fija, no editable desde la app)
--- ============================================================================
+-- Esta parte del código se encarga de entregar las regiones de Chile como lista fija.
 CREATE OR REPLACE VIEW LEHZ_VW_REGIONES_CHILE AS
 SELECT c.ORDEN, c.NOMBRE_REGION
 FROM (
@@ -38,7 +36,7 @@ BEGIN
 END LEHZ_PS_LISTAR_REGIONES_CHILE;
 /
 
--- Evita duplicar nombres de region.
+-- Esta parte del código se encarga de evitar nombres de region repetidos.
 BEGIN
     EXECUTE IMMEDIATE 'ALTER TABLE LEHZ_REGION ADD CONSTRAINT UQ_LEHZ_REGION_NOMBRE UNIQUE (NOMBRE_REGION)';
 EXCEPTION
@@ -51,9 +49,7 @@ END;
 
 ALTER SESSION SET CURRENT_SCHEMA = LEHZ;
 
--- ============================================================================
--- CATALOGO DE COMUNAS DE CHILE (referencia fija)
--- ============================================================================
+-- Esta parte del código se encarga de entregar las comunas de Chile como lista fija.
 
 CREATE OR REPLACE VIEW LEHZ_VW_COMUNAS_CHILE_ALL AS
 SELECT 1 AS ORDEN, 'Algarrobo' AS NOMBRE_COMUNA, 'Region de Valparaiso' AS NOMBRE_REGION FROM DUAL

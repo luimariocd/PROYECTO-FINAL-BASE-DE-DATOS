@@ -1,11 +1,7 @@
--- ============================================================================
--- [02_2] TRIGGERS DE REGLAS DE NEGOCIO Y AUDITORIA
--- ============================================================================
+-- Esta parte del código se encarga de crear triggers de negocio y auditoria.
 ALTER SESSION SET CURRENT_SCHEMA = LEHZ;
 
--- ----------------------------------------------------------------------------
--- Paquete auxiliar de auditoria (evita repetir el INSERT en cada trigger)
--- ----------------------------------------------------------------------------
+-- Esta parte del código se encarga de centralizar el INSERT de auditoria en un paquete.
 CREATE OR REPLACE PACKAGE LEHZ_PKG_AUDITORIA AS
     PROCEDURE REGISTRAR(
         p_tabla     IN VARCHAR2,
@@ -40,9 +36,7 @@ CREATE OR REPLACE PACKAGE BODY LEHZ_PKG_AUDITORIA AS
 END LEHZ_PKG_AUDITORIA;
 /
 
--- ----------------------------------------------------------------------------
--- 1. Bus: anio de fabricacion valido y capacidad coherente con los asientos
--- ----------------------------------------------------------------------------
+-- Esta parte del código se encarga de validar el anio de fabricacion y la capacidad del bus.
 CREATE OR REPLACE TRIGGER LEHZ_TRG_BUS_VALIDA_ANIO
 BEFORE INSERT OR UPDATE OF ANIO_FABRICACION ON LEHZ_BUS
 FOR EACH ROW
@@ -79,9 +73,7 @@ BEGIN
 END;
 /
 
--- ----------------------------------------------------------------------------
--- 2. Asiento: capacidad, piso y ubicacion fisica (distribucion 2+2)
--- ----------------------------------------------------------------------------
+-- Esta parte del código se encarga de validar capacidad, piso y ubicacion 2+2 del asiento.
 CREATE OR REPLACE TRIGGER LEHZ_TRG_ASIENTO_VALIDA
 BEFORE INSERT OR UPDATE ON LEHZ_ASIENTO
 FOR EACH ROW
@@ -107,7 +99,7 @@ BEGIN
         RAISE_APPLICATION_ERROR(-20202, 'Piso invalido: el bus tiene ' || v_pisos || ' piso(s).');
     END IF;
 
-    -- Distribucion 2+2: 1 y 4 son ventana; 2 y 3 son pasillo.
+    -- Esta parte del código se encarga de asignar ventana a 1 y 4, pasillo a 2 y 3.
     v_ubicacion := CASE MOD(:NEW.NUMERO_ASIENTO - 1, 4)
                         WHEN 0 THEN 'VENTANA'
                         WHEN 3 THEN 'VENTANA'
@@ -122,9 +114,7 @@ BEGIN
 END;
 /
 
--- ----------------------------------------------------------------------------
--- 3. Viaje: no permitir fechas anteriores a hoy
--- ----------------------------------------------------------------------------
+-- Esta parte del código se encarga de impedir programar viajes en fechas pasadas.
 CREATE OR REPLACE TRIGGER LEHZ_TRG_VIAJE_FECHA
 BEFORE INSERT OR UPDATE OF FECHA_VIAJE ON LEHZ_VIAJE
 FOR EACH ROW
@@ -135,9 +125,7 @@ BEGIN
 END;
 /
 
--- ----------------------------------------------------------------------------
--- 4. Conductor: licencia vigente al momento de registrarlo
--- ----------------------------------------------------------------------------
+-- Esta parte del código se encarga de exigir licencia vigente al registrar conductores.
 CREATE OR REPLACE TRIGGER LEHZ_TRG_CONDUCTOR_LICENCIA
 BEFORE INSERT OR UPDATE OF VENCIMIENTO_LICENCIA, TIPO_LICENCIA ON LEHZ_CONDUCTOR
 FOR EACH ROW
@@ -154,9 +142,7 @@ BEGIN
 END;
 /
 
--- ----------------------------------------------------------------------------
--- 5. Conduccion: licencia vigente, bus sin mantencion y sin doble asignacion
--- ----------------------------------------------------------------------------
+-- Esta parte del código se encarga de validar licencia, mantencion y doble asignacion.
 CREATE OR REPLACE TRIGGER LEHZ_TRG_CONDUCE_VALIDA
 BEFORE INSERT OR UPDATE ON LEHZ_CONDUCE
 FOR EACH ROW
@@ -205,9 +191,7 @@ BEGIN
 END;
 /
 
--- ----------------------------------------------------------------------------
--- 6. Boleto: capacidad, asiento activo, bus asignado y fecha del viaje
--- ----------------------------------------------------------------------------
+-- Esta parte del código se encarga de validar capacidad, asiento, bus y fecha al vender.
 CREATE OR REPLACE TRIGGER LEHZ_TRG_BOLETO_VALIDA
 BEFORE INSERT OR UPDATE OF ID_VIAJE, PATENTE_BUS, NUMERO_ASIENTO ON LEHZ_BOLETO
 FOR EACH ROW
@@ -272,9 +256,7 @@ BEGIN
 END;
 /
 
--- ----------------------------------------------------------------------------
--- 7. Ciclo de vida del boleto: no reactivar boletos anulados o usados
--- ----------------------------------------------------------------------------
+-- Esta parte del código se encarga de impedir reactivar boletos anulados o usados.
 CREATE OR REPLACE TRIGGER LEHZ_TRG_BOLETO_ESTADO
 BEFORE UPDATE OF ESTADO ON LEHZ_BOLETO
 FOR EACH ROW
@@ -291,9 +273,7 @@ BEGIN
 END;
 /
 
--- ----------------------------------------------------------------------------
--- 8. Pago: debe coincidir con el boleto, su pasajero y su valor
--- ----------------------------------------------------------------------------
+-- Esta parte del código se encarga de hacer coincidir el pago con el boleto, pasajero y valor.
 CREATE OR REPLACE TRIGGER LEHZ_TRG_PAGO_VALIDA
 BEFORE INSERT OR UPDATE ON LEHZ_PAGO
 FOR EACH ROW
@@ -319,9 +299,7 @@ BEGIN
 END;
 /
 
--- ----------------------------------------------------------------------------
--- 9. Bajada independiente: el terminal debe ser parada habilitada de la ruta
--- ----------------------------------------------------------------------------
+-- Esta parte del código se encarga de exigir que la bajada sea una parada habilitada.
 CREATE OR REPLACE TRIGGER LEHZ_TRG_PASAJE_BAJADA_VALIDA
 BEFORE INSERT OR UPDATE ON LEHZ_PASAJE_BAJADA
 FOR EACH ROW
@@ -349,9 +327,7 @@ BEGIN
 END;
 /
 
--- ----------------------------------------------------------------------------
--- 10. Paradas de ruta: la primera parada debe ser el origen
--- ----------------------------------------------------------------------------
+-- Esta parte del código se encarga de obligar a que la primera parada sea el origen.
 CREATE OR REPLACE TRIGGER LEHZ_TRG_RUTA_PARADA_VALIDA
 BEFORE INSERT OR UPDATE ON LEHZ_RUTA_PARADA
 FOR EACH ROW
@@ -378,9 +354,7 @@ BEGIN
 END;
 /
 
--- ----------------------------------------------------------------------------
--- 11. Horario: llegada posterior a la salida
--- ----------------------------------------------------------------------------
+-- Esta parte del código se encarga de exigir que la llegada sea posterior a la salida.
 CREATE OR REPLACE TRIGGER LEHZ_TRG_HORARIO_VALIDA
 BEFORE INSERT OR UPDATE ON LEHZ_HORARIO
 FOR EACH ROW
@@ -394,10 +368,7 @@ BEGIN
 END;
 /
 
--- ============================================================================
--- 12. AUDITORIA AUTOMATICA
---     Se registran cambios en tablas criticas y eliminaciones de mantenedores.
--- ============================================================================
+-- Esta parte del código se encarga de registrar cambios en la bitacora de auditoria.
 CREATE OR REPLACE TRIGGER LEHZ_TRG_AUD_REGION
 AFTER INSERT OR UPDATE OR DELETE ON LEHZ_REGION
 FOR EACH ROW

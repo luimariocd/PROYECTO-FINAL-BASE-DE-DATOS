@@ -1,5 +1,5 @@
 <?php
-// Configuración Oracle. Puedes sobrescribir estos valores con variables de entorno.
+// Esta parte del código se encarga de leer la configuracion de Oracle desde variables de entorno.
 return [
     'host' => getenv('DB_HOST') ?: '127.0.0.1',
     'port' => getenv('DB_PORT') ?: '1521',

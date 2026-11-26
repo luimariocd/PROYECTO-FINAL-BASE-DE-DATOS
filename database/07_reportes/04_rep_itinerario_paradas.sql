@@ -1,8 +1,6 @@
 ALTER SESSION SET CURRENT_SCHEMA = LEHZ;
 
--- ============================================================================
--- REPORTE 04: ITINERARIO POR RUTA CON PARADAS, CIUDADES Y BAJADAS
--- ============================================================================
+-- Esta parte del código se encarga de entregar el itinerario con paradas y bajadas.
 CREATE OR REPLACE PROCEDURE LEHZ_PS_REP_ITINERARIO_PARADAS(
     p_cursor OUT SYS_REFCURSOR
 ) IS

@@ -1,8 +1,5 @@
 <?php
-/**
- * Capa de acceso a Oracle. PHP solo transporta valores y muestra resultados:
- * las validaciones, normalizaciones, tarifas, privilegios y mensajes viven en PL/SQL.
- */
+// Esta parte del código se encarga de abrir y reutilizar la conexion con Oracle.
 
 function db(): mixed {
     static $conn = null;
@@ -27,10 +24,7 @@ function db_bind_value($st, string $name, &$value): void {
     oci_bind_by_name($st, ':' . $name, $value, $len);
 }
 
-/**
- * Ejecuta un procedimiento que entrega un SYS_REFCURSOR como ultimo parametro.
- * Los parametros de entrada se pasan como arreglo asociativo nombre => valor.
- */
+// Esta parte del código se encarga de invocar un procedimiento y leer su SYS_REFCURSOR.
 function db_rows(string $procedure, array $inputs = []): array {
     $c = db();
     $cur = oci_new_cursor($c);
@@ -67,10 +61,7 @@ function db_rows(string $procedure, array $inputs = []): array {
     return $rows;
 }
 
-/**
- * Ejecuta un bloque PL/SQL con binds nombrados y devuelve las variables,
- * incluyendo los parametros OUT que el procedimiento haya modificado.
- */
+// Esta parte del código se encarga de ejecutar un bloque PL/SQL y recoger sus parametros OUT.
 function db_call(string $plsql, array $values): array {
     $c = db();
     $st = oci_parse($c, $plsql);
@@ -95,7 +86,7 @@ function db_call(string $plsql, array $values): array {
     return $vars;
 }
 
-/** Consulta SQL directa sobre vistas ya formateadas por Oracle. */
+// Esta parte del código se encarga de consultar vistas ya formateadas en Oracle.
 function db_query(string $sql, array $binds = []): array {
     $c = db();
     $st = oci_parse($c, $sql);
@@ -133,7 +124,7 @@ function db_scalar(string $sql, array $binds = []): mixed {
     return $values[0] ?? null;
 }
 
-/** Extrae el mensaje de negocio que Oracle entrega con RAISE_APPLICATION_ERROR. */
+// Esta parte del código se encarga de convertir errores ORA-20xxx en mensajes de negocio.
 function db_error_message(Throwable $e): string {
     $msg = $e->getMessage();
     if (preg_match('/ORA-20\d{3}:\s*(.+?)(?:\s*ORA-|\s*Help:|$)/s', $msg, $m)) {

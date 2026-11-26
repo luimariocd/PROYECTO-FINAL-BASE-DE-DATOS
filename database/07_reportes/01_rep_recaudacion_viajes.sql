@@ -1,8 +1,6 @@
 ALTER SESSION SET CURRENT_SCHEMA = LEHZ;
 
--- ============================================================================
--- REPORTE 01: RECAUDACION POR VIAJE (EXCLUYE BOLETOS ANULADOS)
--- ============================================================================
+-- Esta parte del código se encarga de calcular la recaudacion por viaje sin boletos anulados.
 CREATE OR REPLACE PROCEDURE LEHZ_PS_REP_RECAUDACION_VIAJES(
     p_cursor OUT SYS_REFCURSOR
 ) IS

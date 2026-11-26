@@ -1,13 +1,8 @@
 ALTER SESSION SET CURRENT_SCHEMA = LEHZ;
 
--- ============================================================================
--- GESTOR 06: VISTAS FORMATEADAS, TARIFAS Y BAJADAS INDEPENDIENTES
--- ============================================================================
+-- Esta parte del código se encarga de crear vistas, tarifas y bajadas.
 
--- ----------------------------------------------------------------------------
--- Itinerario detallado: una fila por parada de cada ruta. Si la ruta aun no
--- tiene paradas registradas, muestra al menos origen y destino.
--- ----------------------------------------------------------------------------
+-- Esta parte del código se encarga de mostrar una fila por parada de cada ruta.
 CREATE OR REPLACE VIEW LEHZ_VW_ITINERARIO AS
 SELECT r.ID_RUTA,
        r.NOMBRE_RUTA,
@@ -48,9 +43,7 @@ SELECT r.ID_RUTA,
   INNER JOIN LEHZ_COMUNA cd ON cd.ID_COMUNA = d.ID_COMUNA
  WHERE NOT EXISTS (SELECT 1 FROM LEHZ_RUTA_PARADA rp WHERE rp.ID_RUTA = r.ID_RUTA);
 
--- ----------------------------------------------------------------------------
--- Rutas con recorrido completo, origen, destino y conteo de terminales.
--- ----------------------------------------------------------------------------
+-- Esta parte del código se encarga de mostrar origen, destino y terminales de cada ruta.
 CREATE OR REPLACE VIEW LEHZ_VW_RUTAS_DETALLE AS
 SELECT r.ID_RUTA,
        r.NOMBRE_RUTA,
@@ -75,9 +68,7 @@ SELECT r.ID_RUTA,
   INNER JOIN LEHZ_TERMINAL d ON d.ID_TERMINAL = r.ID_TERMINAL_DESTINO
   INNER JOIN LEHZ_COMUNA cd ON cd.ID_COMUNA = d.ID_COMUNA;
 
--- ----------------------------------------------------------------------------
--- Horarios limpios para selectores y reportes.
--- ----------------------------------------------------------------------------
+-- Esta parte del código se encarga de entregar horarios listos para selectores y reportes.
 CREATE OR REPLACE VIEW LEHZ_VW_HORARIOS AS
 SELECT ID_HORARIO,
        HORARIO,
@@ -91,9 +82,7 @@ SELECT ID_HORARIO,
        END AS JORNADA
   FROM LEHZ_HORARIO;
 
--- ----------------------------------------------------------------------------
--- Viajes con sus buses y conductores asignados (una fila por viaje/bus).
--- ----------------------------------------------------------------------------
+-- Esta parte del código se encarga de mostrar buses y conductores por viaje.
 CREATE OR REPLACE VIEW LEHZ_VW_VIAJE_BUSES AS
 SELECT v.ID_VIAJE,
        v.FECHA_VIAJE,
@@ -122,9 +111,7 @@ SELECT v.ID_VIAJE,
           c.PATENTE_BUS, b.MARCA, b.MODELO, b.CAPACIDAD,
           b.TIPO_SERVICIO, b.TARIFA_BASE;
 
--- ----------------------------------------------------------------------------
--- Viajes con datos consolidados para paneles y selectores.
--- ----------------------------------------------------------------------------
+-- Esta parte del código se encarga de consolidar datos de viajes para paneles.
 CREATE OR REPLACE VIEW LEHZ_VW_VIAJES_DETALLE AS
 SELECT v.ID_VIAJE,
        v.FECHA_VIAJE,
@@ -156,9 +143,7 @@ SELECT v.ID_VIAJE,
   INNER JOIN LEHZ_TERMINAL o ON o.ID_TERMINAL = r.ID_TERMINAL_ORIGEN
   INNER JOIN LEHZ_TERMINAL d ON d.ID_TERMINAL = r.ID_TERMINAL_DESTINO;
 
--- ----------------------------------------------------------------------------
--- Asientos disponibles por viaje y bus.
--- ----------------------------------------------------------------------------
+-- Esta parte del código se encarga de listar asientos libres por viaje y bus.
 CREATE OR REPLACE VIEW LEHZ_VW_ASIENTOS_DISPONIBLES AS
 SELECT v.ID_VIAJE,
        c.PATENTE_BUS,
@@ -181,9 +166,7 @@ SELECT v.ID_VIAJE,
           ON c.ID_VIAJE = v.ID_VIAJE
   INNER JOIN LEHZ_ASIENTO a ON a.PATENTE_BUS = c.PATENTE_BUS;
 
--- ----------------------------------------------------------------------------
--- Paradas habilitadas para bajada por viaje/bus, con tarifa calculada.
--- ----------------------------------------------------------------------------
+-- Esta parte del código se encarga de listar paradas con bajada permitida y su tarifa.
 CREATE OR REPLACE VIEW LEHZ_VW_PARADAS_BAJADA AS
 SELECT v.ID_VIAJE,
        v.FECHA_VIAJE,
@@ -205,9 +188,7 @@ SELECT v.ID_VIAJE,
  WHERE rp.PERMITE_BAJADA = 'S'
    AND rp.ORDEN_PARADA > 1;
 
--- ----------------------------------------------------------------------------
--- Boletos formateados para consulta y reportes.
--- ----------------------------------------------------------------------------
+-- Esta parte del código se encarga de formatear boletos para consultas y reportes.
 CREATE OR REPLACE VIEW LEHZ_VW_BOLETOS AS
 SELECT b.ID_BOLETO,
        TO_CHAR(b.FECHA_EMISION_BOLETO, 'DD/MM/YYYY') AS FECHA_EMISION,
@@ -232,9 +213,7 @@ SELECT b.ID_BOLETO,
   LEFT JOIN LEHZ_PASAJE_BAJADA pb ON pb.ID_BOLETO = b.ID_BOLETO
   LEFT JOIN LEHZ_TERMINAL tb ON tb.ID_TERMINAL = pb.ID_TERMINAL_BAJADA;
 
--- ----------------------------------------------------------------------------
--- Resumen general para el panel principal.
--- ----------------------------------------------------------------------------
+-- Esta parte del código se encarga de resumir datos para el panel principal.
 CREATE OR REPLACE VIEW LEHZ_VW_RESUMEN AS
 SELECT (SELECT COUNT(*) FROM LEHZ_EMPRESA) AS TOTAL_EMPRESAS,
        (SELECT COUNT(*) FROM LEHZ_BUS) AS TOTAL_BUSES,
@@ -248,10 +227,7 @@ SELECT (SELECT COUNT(*) FROM LEHZ_EMPRESA) AS TOTAL_EMPRESAS,
          WHERE b.ESTADO <> 'ANULADO') AS RECAUDACION_ACTIVA
   FROM DUAL;
 
--- ----------------------------------------------------------------------------
--- Dominios cerrados del modelo. PHP consume estas listas desde Oracle en lugar
--- de mantener arreglos o valores quemados en el codigo de presentacion.
--- ----------------------------------------------------------------------------
+-- Esta parte del código se encarga de entregar las listas cerradas que consume PHP.
 CREATE OR REPLACE VIEW LEHZ_VW_DOMINIOS AS
 SELECT 'TIPO_SERVICIO' AS DOMINIO, 'NORMAL' AS VALOR, 'Normal' AS ETIQUETA FROM DUAL
 UNION ALL SELECT 'TIPO_SERVICIO', 'SALON CAMA', 'Salon cama' FROM DUAL
@@ -271,9 +247,7 @@ UNION ALL SELECT 'UBICACION_ASIENTO', 'PASILLO', 'Pasillo' FROM DUAL
 UNION ALL SELECT 'CANTIDAD_PISOS', '1', '1 piso' FROM DUAL
 UNION ALL SELECT 'CANTIDAD_PISOS', '2', '2 pisos' FROM DUAL;
 
--- ----------------------------------------------------------------------------
--- Registro o cambio de la bajada independiente de un boleto existente.
--- ----------------------------------------------------------------------------
+-- Esta parte del código se encarga de registrar o cambiar la bajada de un boleto.
 CREATE OR REPLACE PROCEDURE LEHZ_PS_GES_REGISTRAR_BAJADA(
     p_id_boleto          IN NUMBER,
     p_id_terminal_bajada IN NUMBER,

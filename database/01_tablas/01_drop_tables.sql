@@ -1,7 +1,6 @@
 ALTER SESSION SET CURRENT_SCHEMA = LEHZ;
 
--- Eliminacion ordenada de las tablas del modelo (las tablas de seguridad
--- se eliminan en 03_seguridad/01_drop_seguridad.sql).
+-- Esta parte del código se encarga de eliminar las tablas en orden, respetando dependencias.
 DROP TABLE LEHZ_PASAJE_BAJADA CASCADE CONSTRAINTS;
 DROP TABLE LEHZ_RUTA_PARADA CASCADE CONSTRAINTS;
 DROP TABLE LEHZ_PAGO CASCADE CONSTRAINTS;

@@ -1,8 +1,6 @@
 ALTER SESSION SET CURRENT_SCHEMA = LEHZ;
 
--- ============================================================================
--- MANTENEDOR 04: EMPRESAS
--- ============================================================================
+-- Esta parte del código se encarga de crear el mantenedor de empresas.
 CREATE OR REPLACE PROCEDURE LEHZ_PS_IUD_EMPRESA(
     p_opcion       IN VARCHAR2,
     p_rut_empresa  IN VARCHAR2,

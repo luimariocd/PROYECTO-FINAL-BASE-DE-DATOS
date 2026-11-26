@@ -1,7 +1,4 @@
-/* ============================================================
-   RutaGestion - capa visual sobre AdminLTE 4 / Bootstrap 5
-   Identidad: azul profundo + cian/verde menta + acento ambar.
-   ============================================================ */
+/* Esta parte del código se encarga de definir colores y sombras del tema. */
 :root {
     --app-page-bg: #f4f6fb;
     --app-surface: #ffffff;
@@ -52,7 +49,7 @@ body {
 .card-body > :last-child { margin-bottom: 0; }
 .hover-lift:hover { transform: translateY(-2px); box-shadow: 0 .9rem 2.2rem rgba(20, 43, 82, .12); }
 
-/* Cabecera */
+/* Esta parte del código se encarga de dar estilo a la cabecera. */
 .app-header {
     background: color-mix(in srgb, var(--app-surface) 92%, transparent) !important;
     border-bottom: 1px solid var(--app-border);
@@ -92,7 +89,7 @@ body {
 .user-meta b { font-size: .76rem; color: var(--bs-emphasis-color); }
 .user-meta small { font-size: .58rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--bs-secondary-color); }
 
-/* Menu lateral */
+/* Esta parte del código se encarga de dar estilo al menu lateral. */
 .app-wrapper .app-sidebar {
     --lte-sidebar-color: var(--app-sidebar-text);
     --lte-sidebar-hover-color: #fff;
@@ -140,7 +137,7 @@ body {
 .app-wrapper .app-sidebar .nav-link:hover .nav-icon,
 .app-wrapper .app-sidebar .nav-link.active .nav-icon { color: #fff; }
 
-/* Contenido */
+/* Esta parte del código se encarga de dar estilo al contenido. */
 .app-content-header h3 {
     color: var(--bs-emphasis-color); font-weight: 800; letter-spacing: -.02em;
 }
@@ -156,7 +153,7 @@ body {
     padding: .85rem 1.5rem; backdrop-filter: blur(8px);
 }
 
-/* Portada del panel */
+/* Esta parte del código se encarga de dar estilo a la portada del panel. */
 .dashboard-hero {
     background: linear-gradient(120deg, #233f8f 0%, #3563d9 45%, #00a89b 100%) !important;
     position: relative; overflow: hidden;
@@ -167,7 +164,7 @@ body {
 }
 .dashboard-hero .card-body { position: relative; z-index: 1; }
 
-/* Tarjetas de resumen AdminLTE */
+/* Esta parte del código se encarga de dar estilo a las tarjetas resumen. */
 .small-box {
     border-radius: 1rem; border: 0; box-shadow: var(--app-shadow);
     overflow: hidden; transition: transform .18s ease;
@@ -189,7 +186,7 @@ body {
 .stat-card .stat-value { font-size: 1.5rem; font-weight: 800; letter-spacing: -.02em; }
 .stat-card .stat-label { color: var(--bs-secondary-color); font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
 
-/* Tablas */
+/* Esta parte del código se encarga de dar estilo a las tablas. */
 .table > :not(caption) > * > * { padding: .75rem .85rem; }
 .table thead th {
     color: var(--bs-secondary-color); font-size: .68rem; font-weight: 800;
@@ -200,7 +197,7 @@ body {
 .table-hover tbody tr:hover { background: var(--bs-primary-bg-subtle); }
 .table-responsive { border-radius: 0 0 1rem 1rem; }
 
-/* Formularios */
+/* Esta parte del código se encarga de dar estilo a los formularios. */
 .form-label {
     margin-bottom: .4rem; color: var(--bs-secondary-color);
     font-size: .74rem; font-weight: 800; letter-spacing: .02em;
@@ -216,7 +213,7 @@ body {
 .btn-primary:hover { background: linear-gradient(135deg, #2b56c4, #4f73da); }
 .phone-prefix { max-width: 110px; }
 
-/* Autocompletado de regiones y comunas */
+/* Esta parte del código se encarga de mostrar el autocompletado de regiones y comunas. */
 .ac-input { min-height: 44px; font-size: .9rem; }
 .ac-dropdown {
     position: static;
@@ -236,7 +233,7 @@ body {
     font-size: .7rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase;
 }
 
-/* Inicio de sesion */
+/* Esta parte del código se encarga de dar estilo al inicio de sesion. */
 .login-theme-switch {
     position: fixed; z-index: 5; top: 1rem; right: 1rem;
     display: flex; gap: .3rem;
@@ -307,7 +304,7 @@ body {
         linear-gradient(180deg, rgba(4, 14, 30, .10) 0%, rgba(4, 14, 30, .28) 100%);
 }
 
-/* Semi-circulo lateral que contiene el acceso */
+/* Esta parte del código se encarga de dibujar el panel lateral del login. */
 .login-panel {
     position: relative; z-index: 2;
     width: min(560px, 52vw); min-height: 100vh;
@@ -367,7 +364,7 @@ body {
 .login-social { display: flex; align-items: center; gap: .6rem; color: var(--bs-secondary-color); font-size: .68rem; }
 .login-social::before, .login-social::after { content: ""; flex: 1; height: 1px; background: var(--app-border); }
 
-/* Graficos */
+/* Esta parte del código se encarga de dibujar los graficos. */
 .chart-card { height: 100%; }
 .chart-wrap { position: relative; height: 280px; width: 100%; }
 .chart-legend { display: flex; flex-wrap: wrap; gap: .75rem 1.25rem; margin-top: .9rem; }
@@ -397,7 +394,7 @@ body {
 
 .toast-notification { z-index: 1090; }
 
-/* Modo oscuro: AdminLTE/Bootstrap sobreescriben varios tokens, aqui se fijan */
+/* Esta parte del código se encarga de fijar los colores del modo oscuro. */
 [data-bs-theme="dark"] body { background-color: var(--app-page-bg); }
 [data-bs-theme="dark"] .login-page {
     background:
@@ -441,7 +438,7 @@ body {
     color: var(--bs-body-color);
 }
 
-/* Impresion */
+/* Esta parte del código se encarga de ajustar la impresion. */
 @media print {
     .app-header, .app-sidebar, .app-footer, .btn, .breadcrumb, .chart-card { display: none !important; }
     .app-content, .app-content-header { padding: 0 !important; }

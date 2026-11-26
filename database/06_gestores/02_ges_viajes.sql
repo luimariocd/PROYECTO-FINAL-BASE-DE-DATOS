@@ -1,8 +1,6 @@
 ALTER SESSION SET CURRENT_SCHEMA = LEHZ;
 
--- ============================================================================
--- GESTOR 02: PROGRAMACION DE VIAJES
--- ============================================================================
+-- Esta parte del código se encarga de programar viajes a partir de horarios y rutas.
 CREATE OR REPLACE PROCEDURE LEHZ_PS_GES_PROGRAMAR_VIAJE(
     p_fecha_viaje  IN DATE,
     p_id_horario   IN NUMBER,

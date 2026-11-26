@@ -1,6 +1,6 @@
 ALTER SESSION SET CURRENT_SCHEMA = LEHZ;
 
--- Triggers originales de auditoria y validacion de mantenciones.
+-- Esta parte del código se encarga de eliminar los triggers originales de auditoria y mantencion.
 BEGIN EXECUTE IMMEDIATE 'DROP TRIGGER LEHZ_TRG_AUDITORIA_BUSES'; EXCEPTION WHEN OTHERS THEN NULL; END;
 /
 BEGIN EXECUTE IMMEDIATE 'DROP TRIGGER LEHZ_TRG_AUDITORIA_MANTENCIONES'; EXCEPTION WHEN OTHERS THEN NULL; END;

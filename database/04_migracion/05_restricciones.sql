@@ -1,4 +1,4 @@
--- Recreacion de restricciones e indices de LEHZTEST dentro de LEHZ
+-- Esta parte del código se encarga de recrear restricciones e indices en LEHZ.
 SET DEFINE OFF
 SET SERVEROUTPUT ON SIZE UNLIMITED
 WHENEVER SQLERROR CONTINUE

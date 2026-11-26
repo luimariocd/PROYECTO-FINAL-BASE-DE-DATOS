@@ -1,6 +1,4 @@
--- ============================================================================
--- [01_2] LIMPIEZA DE TRIGGERS DE REGLAS DE NEGOCIO Y AUDITORIA
--- ============================================================================
+-- Esta parte del código se encarga de eliminar triggers de negocio y auditoria.
 ALTER SESSION SET CURRENT_SCHEMA = LEHZ;
 
 BEGIN EXECUTE IMMEDIATE 'DROP TRIGGER LEHZ_TRG_BUS_VALIDA_ANIO'; EXCEPTION WHEN OTHERS THEN NULL; END;

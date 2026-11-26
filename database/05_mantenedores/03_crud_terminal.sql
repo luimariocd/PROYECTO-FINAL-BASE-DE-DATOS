@@ -1,8 +1,6 @@
 ALTER SESSION SET CURRENT_SCHEMA = LEHZ;
 
--- ============================================================================
--- MANTENEDOR 03: TERMINALES
--- ============================================================================
+-- Esta parte del código se encarga de crear el mantenedor de terminales.
 CREATE OR REPLACE PROCEDURE LEHZ_PS_IUD_TERMINAL(
     p_opcion      IN VARCHAR2,
     p_id_terminal IN OUT NUMBER,

@@ -1,8 +1,6 @@
 ALTER SESSION SET CURRENT_SCHEMA = LEHZ;
 
--- ============================================================================
--- REPORTE 03: OCUPACION DE ASIENTOS POR VIAJE Y BUS
--- ============================================================================
+-- Esta parte del código se encarga de calcular la ocupacion de asientos por viaje.
 CREATE OR REPLACE PROCEDURE LEHZ_PS_REP_OCUPACION_ASIENTOS(
     p_cursor OUT SYS_REFCURSOR
 ) IS

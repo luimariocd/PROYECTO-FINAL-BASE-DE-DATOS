@@ -54,7 +54,7 @@ CREATE SEQUENCE LEHZ_SEQ_PAGO
     NOCACHE
     NOCYCLE;
 
--- SEQ SEGURIDAD Y AUDITORIA
+-- Esta parte del código se encarga de crear las secuencias de seguridad y auditoria.
 
 CREATE SEQUENCE LEHZ_SEQ_ROL
     START WITH 1
@@ -74,7 +74,7 @@ CREATE SEQUENCE LEHZ_SEQ_AUDITORIA
     NOCACHE
     NOCYCLE;
 
--- ==================== [NUEVO] SECUENCIAS DE PARADAS Y BAJADAS ====================
+-- Esta parte del código se encarga de crear las secuencias de paradas y bajadas.
 CREATE SEQUENCE LEHZ_SEQ_RUTA_PARADA 
     START WITH 1 
     INCREMENT BY 1 
@@ -86,4 +86,3 @@ CREATE SEQUENCE LEHZ_SEQ_PASAJE_BAJADA
     INCREMENT BY 1 
     NOCACHE 
     NOCYCLE;
--- =================================================================================
