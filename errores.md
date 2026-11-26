@@ -2,12 +2,8 @@
 
 Proyecto: Sistema LEHZ – Transporte Regional  
 Rama base: `Denunce`  
-Esquema de validacion: `LEHZTEST` (sin destruir `LEHZ`)  
-<<<<<<< HEAD
-Fecha de cierre de pruebas: 25/11/2026
-=======
-Fecha de cierre de pruebas: 24/11/2026
->>>>>>> 05e766dd077aefce9c75935cc0164f80ed0eb28f
+Esquema objetivo final: `LEHZ` (validacion previa en `LEHZTEST`, sin destruir datos de `LEHZ`)  
+Fecha de cierre de pruebas: 26/11/2026
 
 ## Leyenda de estado
 - **Corregido**: causa raiz corregida y verificada en Oracle/PHP.
@@ -66,7 +62,6 @@ Fecha de cierre de pruebas: 24/11/2026
 | 35 | `lehz-web` montaba `PROYECTO-FINAL-BASE-DE-DATOS`, no el directorio de trabajo. | Ruta de bind distinta. | Se sincronizaron archivos con `robocopy`. | Corregido |
 | 36 | `oracle-lehz` se detuvo durante las pruebas. | Contenedor apagado. | Se reinicio y se reinstalo `LEHZTEST`. | Corregido |
 
-<<<<<<< HEAD
 ## 4. Migracion de interfaz a AdminLTE 4 / Bootstrap 5
 
 | # | Hallazgo | Causa raiz | Correccion aplicada | Estado |
@@ -90,28 +85,49 @@ Fecha de cierre de pruebas: 24/11/2026
 | 48 | Los reportes solo mostraban una tabla y totales. | No habia visualizacion de series temporales. | `report.php` genera un grafico de linea (SVG) por dia, un grafico circular (conic-gradient) por categoria y barras de boletos vendidos por dia, usando solo datos de Oracle. | Corregido |
 | 49 | El reporte de costos de mantencion no detectaba fechas ni categoria. | Las columnas se llamaban `ULTIMA_MANTENCION` y `RAZON_SOCIAL`. | Deteccion de fechas por contenido y de categoria por `NOMBRE/RAZON/RUTA/PATENTE`. | Corregido |
 | 50 | La portada del panel era un bloque plano. | `bg-gradient` generico de Bootstrap. | Hero con gradiente propio y detalle decorativo, mas `page-kicker` en el encabezado. | Corregido |
+| 51 | El registro publico permitia crear cuentas sin administrador. | Formulario y accion `register` expuestos en login. | Se quitaron la pestaña "Crear cuenta", el formulario y el handler PHP. Los usuarios se crean solo desde el modulo Usuarios (procedimiento de Oracle). | Corregido |
 
-=======
->>>>>>> 05e766dd077aefce9c75935cc0164f80ed0eb28f
 ## Pendientes no bloqueantes
 - Los scripts SQL usan `ALTER SESSION SET CURRENT_SCHEMA = LEHZ;` en su version original; en `LEHZTEST` se ejecutan con el usuario de prueba. No afecta la entrega.
 - El `docker-compose.yml` inicializa solo tablas en una instalacion nueva; la carga completa requiere ejecutar 01→08 manualmente (documentado en README).
-- No se reinstalo el esquema `LEHZ` original para no destruir datos; toda la validacion se hizo en `LEHZTEST`.
+- El esquema `LEHZ` no se reinstalo desde cero; su estructura se migro desde `LEHZTEST` y los datos originales quedaron en `LEHZ_BAK_*`. Ver `database/04_migracion/README.md`.
 
 ## Verificacion final
 - Instalacion 01→08 en `LEHZTEST`: `FAILED_COUNT=0`.
-<<<<<<< HEAD
 - Pruebas Oracle: 47 verificaciones, todas `PASS` (suite original; la base no se modifico en la fase de interfaz).
 - Comprobaciones puntuales repetidas: telefonos `+56 9` / `600` / `809` normalizados por Oracle; `t@hh` rechazado con `ORA-20030` y `@outlook.com` aceptado; horario 23:00→01:00 almacenado como dia siguiente.
-- Vistas web probadas: login (incluye registro), dashboard, 12 mantenedores, venta, bajada, viaje, conduce, mantencion, utilizan, usuarios, 4 reportes (24 paginas en total).
+- Vistas web probadas: login (sin registro publico), dashboard, 12 mantenedores, venta, bajada, viaje, conduce, mantencion, utilizan, usuarios, 4 reportes (24 paginas en total).
 - Las 24 paginas cargan con el shell AdminLTE, sin errores de consola ni mensajes PHP/ORA inesperados.
 - CRUD completo verificado en empresas (crear/editar/eliminar) y ciclo de horarios con llegada al dia siguiente.
 - Selector de tema claro/oscuro/automatico (tambien en login) y persistencia del scroll lateral verificados.
 - Graficos verificados: recaudacion por dia (`$148.400` en 4 dias), distribucion por ruta y boletos vendidos por dia; costos de mantencion tambien generan linea y circular.
 - Las 24 paginas se reverificaron tras la mejora visual: sin errores PHP/ORA ni errores de consola.
-- Sincronizacion de `app/` con `C:\Users\behemoth\Documents\PROYECTO-FINAL-BASE-DE-DATOS\app` completada; `lehz-web` sirve la version migrada y mejorada.
-=======
-- Pruebas Oracle: 47 verificaciones, todas `PASS`.
-- Vistas web probadas: login, dashboard, 12 mantenedores, venta, bajada, viaje, conduce, mantencion, utilizan, usuarios, 4 reportes.
-- Operaciones CRUD y gestores probados exitosamente en `http://localhost:8000` contra `LEHZTEST`.
->>>>>>> 05e766dd077aefce9c75935cc0164f80ed0eb28f
+- Docker levantado el 26/11/2026: `oracle-lehz` y `lehz-web` activos; web responde en `http://localhost:8000` con esquema `LEHZ`.
+- `lehz-web` recreado sin `DB_USER=LEHZTEST`; `docker inspect` confirma `DB_USER=LEHZ` y montaje sobre `C:\Users\behemoth\Documents\PROYECTO-FINAL-BASE-DE-DATOS`.
+- Sincronizacion de `app/`, `docker-compose.yml`, documentacion y `database/04_migracion/` con `C:\Users\behemoth\Documents\PROYECTO-FINAL-BASE-DE-DATOS` completada; `lehz-web` sirve la version migrada y mejorada.
+
+## 6. Migracion definitiva a `LEHZ`
+
+| # | Hallazgo | Causa raiz | Correccion aplicada | Estado |
+|---|----------|------------|---------------------|--------|
+| 52 | `LEHZ` tenia estructura antigua: RUT/telefonos `NUMBER`, sin `ESTADO` en boletos, sin paradas ni bajadas. | Esquema original nunca se alineo con `LEHZTEST`. | Se migraron columnas, tablas, secuencias, vistas, procedures, funciones, paquetes y 44 triggers. | Corregido |
+| 53 | `DBMS_METADATA` no podia leer restricciones de `LEHZTEST` desde el usuario `LEHZ`. | Faltaban privilegios de catalogo. | Se extrajeron las DDL con `SYSTEM` y se ejecutaron dentro de `LEHZ` (61 restricciones, 27 FKs, 2 indices). | Corregido |
+| 54 | El cambio de `NUMBER` a `VARCHAR2` fallaba por `ORA-01439` / `ORA-01463`. | Columnas con datos y restricciones dependientes. | Se agregaron columnas nuevas, se convirtieron los valores, se borraron las columnas viejas y se recrearon las restricciones. | Corregido |
+| 55 | Tres patentes heredadas no cumplian el formato nuevo. | Datos legacy de `LEHZ`. | `CK_BUS_PATENTE` se creo con `ENABLE NOVALIDATE`; los triggers validan las altas nuevas. Originales en `LEHZ_BAK_LEHZ_BUS`. | Corregido |
+| 56 | Modo oscuro: AdminLTE/Bootstrap sobreescribian bordes, fondos y sombras de tarjetas. | Falta de especificidad en `app.css`. | Se agregaron overrides con selector `[data-bs-theme="dark"]`. | Corregido |
+| 57 | `docker-compose.yml` publicaba el puerto `1521` de Oracle en el host. | Mapeo heredado `1521:1521`. | Se elimino el mapeo y se recreo `oracle-lehz`; Oracle queda solo en la red interna de Docker (`oracle-db:1521`). | Corregido |
+| 58 | El login era funcional pero visualmente plano. | Falta de una imagen de identidad. | Se agrego la foto del bus al atardecer como fondo a pagina completa (sin desenfoque, solo realce de color) y el formulario se ubico a la derecha dentro de un panel semi-circular de cristal (`border-radius: 50% 0 0 50% / 48% 0 0 48%`, `backdrop-filter: blur(16px)`). Se quito el texto de regiones. Incluye AVIF/WebP y diseno responsive. | Corregido |
+| 59 | En Regiones/Comunas el desplegable quedaba cortado dentro del modal y habia que desplazarse para ver las opciones. | `.ac-dropdown` era `position:absolute` y el `.modal-dialog-scrollable` recortaba el desbordamiento. | Se cambio a `position:static` con `max-height:320px`, se amplio la fuente a `.9rem` y se abre automaticamente al abrir el modal (`shown.bs.modal`). El body del modal crece y no requiere scroll. | Corregido |
+
+### Verificacion de la migracion
+
+- Objetos `INVALID`: **0** (9 funciones, 2 paquetes + 2 bodies, 57 procedimientos, 15 secuencias, 44 triggers, 14 vistas).
+- Triggers: **44 habilitados / 0 deshabilitados**. Restricciones: **88 habilitadas / 0 deshabilitadas**.
+- Datos en `LEHZ`: 20 boletos, 9 bajadas, 43 asientos, 6 viajes, 6 buses, 5 empresas, 8 pasajeros, 4 usuarios.
+- Vistas: `LEHZ_VW_COMUNAS_CHILE` 97 filas, `LEHZ_VW_REGIONES_CHILE` 13, `LEHZ_VW_HORARIOS` 6, `LEHZ_VW_BOLETOS` 20, `LEHZ_VW_VIAJES_DETALLE` 6.
+- Las 24 paginas se recargaron contra `LEHZ` despues de recrear el contenedor web: todas `HTTP 200`, titulo correcto, sin `ORA-`, `Fatal error`, `Notice` ni errores de consola.
+- Panel en modo oscuro: `body` `rgb(11,17,27)`, texto `rgb(222,226,230)`, 6 `small-box` con contraste correcto; reporte de recaudacion con 5 `stat-card`, 1 SVG y sombras/bordes oscuros aplicados.
+- Regiones/Comunas verificados: el modal crece a `433 px`, el desplegable mostraba 13/97 opciones sin recorte, fuente `14.4 px` y la seleccion escribe el campo oculto (`Alhue`).
+- `docker ps` confirma que `oracle-lehz` **no publica puertos** y `lehz-web` solo publica `8000`; los datos persisten tras recrear Oracle (`LEHZ_USUARIO` = 4 filas).
+- Login verificado en claro y oscuro: imagen AVIF cargada (`740x494`) a pagina completa sin desenfoque (`saturate(1.1) contrast(1.04)`), panel semi-circular a la derecha con `backdrop-filter: blur(16px)` y radio `50% 0 0 50% / 48% 0 0 48%`; sin texto de regiones, sin errores de consola y autenticacion `admin` / `Admin1234` redirige al panel.
+- Scripts y orden de ejecucion documentados en `database/04_migracion/README.md`.

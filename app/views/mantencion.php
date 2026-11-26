@@ -8,7 +8,6 @@ $mantenciones = db_rows('LEHZ_PS_LISTAR_MANTENCIONES');
         <h3 class="card-title mb-0">Registrar mantencion</h3>
         <div class="text-body-secondary small mt-1">Oracle bloquea fechas futuras y buses asignados a un viaje ese dia.</div>
     </div>
-<<<<<<< HEAD
     <div class="card-body">
         <form method="post" class="row g-3">
             <input type="hidden" name="action" value="mantencion">
@@ -48,38 +47,6 @@ $mantenciones = db_rows('LEHZ_PS_LISTAR_MANTENCIONES');
         </form>
     </div>
 </div>
-=======
-    <form method="post" class="form-grid">
-        <input type="hidden" name="action" value="mantencion">
-        <label>Fecha
-            <input type="date" name="fecha" required min="<?= date('Y-m-d') ?>" value="<?= h(old_value('fecha')) ?>">
-        </label>
-        <label>Costo
-            <input type="number" name="costo" min="0" step="1" required value="<?= h(old_value('costo')) ?>">
-        </label>
-        <label class="span-2">Descripcion
-            <input name="descripcion" required maxlength="500" value="<?= h(old_value('descripcion')) ?>" placeholder="Trabajo realizado">
-        </label>
-        <label>Mecanico
-            <select name="rut_mecanico" required>
-                <option value="">Seleccione un mecanico...</option>
-                <?php foreach ($mecanicos as $m): ?>
-                    <option value="<?= h($m['value']) ?>" <?= (string)old_value('rut_mecanico') === (string)$m['value'] ? 'selected' : '' ?>><?= h($m['label']) ?></option>
-                <?php endforeach; ?>
-            </select>
-        </label>
-        <label>Bus
-            <select name="patente_bus" required>
-                <option value="">Seleccione un bus...</option>
-                <?php foreach ($buses as $b): ?>
-                    <option value="<?= h($b['value']) ?>" <?= (string)old_value('patente_bus') === (string)$b['value'] ? 'selected' : '' ?>><?= h($b['label']) ?></option>
-                <?php endforeach; ?>
-            </select>
-        </label>
-        <div class="form-actions"><button class="btn primary" type="submit">Registrar mantencion</button></div>
-    </form>
-</section>
->>>>>>> 05e766dd077aefce9c75935cc0164f80ed0eb28f
 
 <div class="card mb-4">
     <div class="card-header">

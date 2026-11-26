@@ -12,6 +12,8 @@ La interfaz usa **AdminLTE 4 + Bootstrap 5** y se sirve desde `app/public`. Incl
 
 Toda la validación, normalización y lógica de negocio permanece en Oracle; PHP solo muestra y envía datos a los procedimientos almacenados.
 
+El acceso es restringido: **no hay registro público**. Los usuarios los crea el administrador desde el módulo `Usuarios`.
+
 ## Inicio local (sin Docker)
 
 Desde la raíz del repositorio:

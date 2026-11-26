@@ -9,7 +9,7 @@ El servidor expone dos cosas por Tailscale:
 | Servicio | Puerto | Uso |
 |---|---|---|
 | Web (AdminLTE) | `8000` | Usar el sistema desde el navegador |
-| Oracle (`FREEPDB1`) | `1521` | Conectar VS Code / SQL Developer para scripts |
+| Oracle (`FREEPDB1`) | interno `1521` | Solo dentro de Docker; **no publicado por Tailscale** |
 
 La aplicación web ya se conecta a Oracle internamente (`DB_HOST=oracle-db`), así que para **usar el sistema** solo necesitas el navegador.
 
@@ -26,12 +26,12 @@ La aplicación web ya se conecta a Oracle internamente (`DB_HOST=oracle-db`), as
 
    Deben aparecer `oracle-lehz` y `lehz-web`.
 
-2. Abrir **PowerShell como Administrador** y permitir ambos puertos (solo una vez):
+2. Abrir **PowerShell como Administrador** y permitir solo el puerto web (solo una vez):
 
    ```powershell
    New-NetFirewallRule -DisplayName "LEHZ Web 8000" -Direction Inbound -LocalPort 8000 -Protocol TCP -Action Allow
-   New-NetFirewallRule -DisplayName "Oracle Docker 1521" -Direction Inbound -LocalPort 1521 -Protocol TCP -Action Allow
    ```
+   > No abras el `1521`: Oracle escucha solo en la red interna de Docker.
 
 3. Tener **Tailscale** abierto, iniciado sesión en la red del equipo y compartir la IP privada (`100.x.y.z`):
 
@@ -82,18 +82,11 @@ Solo si vas a editar o ejecutar scripts `.sql`.
 
 2. Instalar en VS Code **`Oracle SQL Developer for VSCode`** (publicada por **Oracle Corporation**). Evita la extensión antigua *Oracle Developer Tools*.
 
-3. Crear la conexión con el ícono morado de base de datos → **`+`**:
-
-   * **Nombre de conexión:** `LEHZ_Remoto`
-   * **Tipo de Conexión:** `Esencial`
-   * **Nombre de host:** `100.x.y.z`
-   * **Puerto:** `1521`
-   * **Tipo:** `Nombre de servicio`
-   * **Nombre de servicio:** `FREEPDB1`
-   * **Nombre de Usuario:** `LEHZ`
-   * **Contraseña:** `Lehz1234` *(marcar Guardar Contraseña)*
-
-4. **Probar** y luego **Establecer conexión**. Deberían aparecer las tablas `LEHZ_` y las vistas del catálogo de Chile.
+3. Como **`1521` no está publicado**, conecta por **Escritorio Remoto (RDP)** al servidor y ejecuta los scripts dentro de él:
+   ```powershell
+   Get-Content .\database\04_migracion\08_verificacion.sql | docker exec -i oracle-lehz sqlplus -s LEHZ/Lehz1234@localhost:1521/FREEPDB1
+   ```
+   Si usas SQL Developer dentro de ese escritorio: host `localhost`, puerto `1521`, servicio `FREEPDB1`, usuario `LEHZ`, contraseña `Lehz1234`. Deberían aparecer las tablas `LEHZ_` y las vistas del catálogo de Chile.
 
 > Ejecutar scripts afecta la base del servidor. Coordínalo con el equipo.
 

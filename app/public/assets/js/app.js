@@ -5,14 +5,21 @@
         return document.getElementById(id);
     }
 
-    function showModal(id) {
+    function showModal(id, focusSelector) {
         var modal = byId(id);
         if (!modal) return;
+        function focusTarget() {
+            if (!focusSelector) return;
+            var el = modal.querySelector(focusSelector);
+            if (el) { el.focus(); el.click(); }
+        }
         if (window.bootstrap && bootstrap.Modal) {
+            modal.addEventListener('shown.bs.modal', focusTarget, { once: true });
             bootstrap.Modal.getOrCreateInstance(modal).show();
         } else {
             modal.classList.add('show');
             modal.style.display = 'block';
+            focusTarget();
         }
     }
 
@@ -80,7 +87,7 @@
             if (ac) ac.value = '';
             if (field.type === 'tel') setPhoneField(field.name, '');
         });
-        showModal('recordModal');
+        showModal('recordModal', '.ac-input');
     };
 
     window.editMaintainer = function (row) {
@@ -119,7 +126,7 @@
                 fechaHorario.value = salida.substring(0, 10);
             }
         }
-        showModal('recordModal');
+        showModal('recordModal', '.ac-input');
     };
 
     window.closeModal = function () {
@@ -314,21 +321,12 @@
                 });
                 var html = '';
                 order.forEach(function (g) {
-<<<<<<< HEAD
                     if (g) html += '<div class="list-group-item ac-group">' + g + '</div>';
                     groups[g].forEach(function (o) {
                         html += '<div class="list-group-item list-group-item-action ac-option" data-value="' + String(o.value).replace(/"/g, '&quot;') + '">' + o.label + '</div>';
                     });
                 });
                 if (!html) html = '<div class="list-group-item text-body-secondary ac-empty">Sin resultados</div>';
-=======
-                    if (g) html += '<div class="ac-group">' + g + '</div>';
-                    groups[g].forEach(function (o) {
-                        html += '<div class="ac-option" data-value="' + String(o.value).replace(/"/g, '&quot;') + '">' + o.label + '</div>';
-                    });
-                });
-                if (!html) html = '<div class="ac-empty">Sin resultados</div>';
->>>>>>> 05e766dd077aefce9c75935cc0164f80ed0eb28f
                 dd.innerHTML = html;
                 dd.style.display = 'block';
             }
@@ -359,7 +357,6 @@
         var numInput = document.getElementById('num_' + fieldName);
         var prefixSel = document.querySelector('.phone-prefix[data-target="field_' + fieldName + '"]');
         if (!hidden || !numInput || !prefixSel) return;
-<<<<<<< HEAD
         var prefix = prefixSel.value;
         var num = numInput.value.replace(/\D+/g, '');
         if (prefix === '+56 9') {
@@ -369,10 +366,6 @@
             num = num.substring(3);
         }
         hidden.value = num ? (prefix + ' ' + num) : '';
-=======
-        var num = numInput.value.trim().replace(/^\+?56\s*9?\s*/, '').replace(/^600\s*/, '').replace(/^809\s*/, '').trim();
-        hidden.value = num ? (prefixSel.value + ' ' + num) : '';
->>>>>>> 05e766dd077aefce9c75935cc0164f80ed0eb28f
     }
 
     document.addEventListener('input', function (event) {
@@ -394,11 +387,7 @@
     });
 
     (function sidebarScroll() {
-<<<<<<< HEAD
         var sb = document.querySelector('.sidebar-wrapper') || document.querySelector('.sidebar');
-=======
-        var sb = document.querySelector('.sidebar');
->>>>>>> 05e766dd077aefce9c75935cc0164f80ed0eb28f
         if (!sb) return;
         var key = 'sidebarScroll';
         var saved = sessionStorage.getItem(key);

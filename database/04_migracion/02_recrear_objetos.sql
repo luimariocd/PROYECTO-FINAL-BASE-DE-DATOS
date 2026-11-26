@@ -1,0 +1,4313 @@
+-- Recreacion de objetos de Oracle en LEHZ (estructura ya migrada)
+SET DEFINE OFF
+SET SQLBLANKLINES ON
+WHENEVER SQLERROR CONTINUE
+
+CREATE OR REPLACE PACKAGE "LEHZ_PKG_AUDITORIA" AS
+    PROCEDURE REGISTRAR(
+	p_tabla     IN VARCHAR2,
+	p_operacion IN VARCHAR2,
+	p_id	    IN VARCHAR2,
+	p_detalle   IN VARCHAR2
+    );
+END LEHZ_PKG_AUDITORIA;
+/
+CREATE OR REPLACE PACKAGE BODY "LEHZ_PKG_AUDITORIA" AS
+    PROCEDURE REGISTRAR(
+	p_tabla     IN VARCHAR2,
+	p_operacion IN VARCHAR2,
+	p_id	    IN VARCHAR2,
+	p_detalle   IN VARCHAR2
+    ) IS
+    BEGIN
+	INSERT INTO LEHZ_AUDITORIA (
+	    ID_AUDITORIA, TABLA_AFECTADA, OPERACION, ID_REGISTRO,
+	    DETALLE, USUARIO_BD, FECHA_EVENTO
+	) VALUES (
+	    LEHZ_SEQ_AUDITORIA.NEXTVAL,
+	    SUBSTR(p_tabla, 1, 40),
+	    SUBSTR(p_operacion, 1, 15),
+	    SUBSTR(p_id, 1, 60),
+	    SUBSTR(p_detalle, 1, 500),
+	    USER,
+	    SYSTIMESTAMP
+	);
+    END REGISTRAR;
+END LEHZ_PKG_AUDITORIA;
+/
+CREATE OR REPLACE PACKAGE "LEHZ_PKG_SEGURIDAD" AS
+    FUNCTION FN_VALIDAR_LOGIN(
+	p_username IN VARCHAR2,
+	p_password IN VARCHAR2
+    ) RETURN SYS_REFCURSOR;
+
+    PROCEDURE SP_CREAR_USUARIO(
+	p_username	  IN VARCHAR2,
+	p_password	  IN VARCHAR2,
+	p_nombre_completo IN VARCHAR2,
+	p_email 	  IN VARCHAR2,
+	p_id_rol	  IN NUMBER,
+	p_id_generado	  OUT NUMBER
+    );
+
+    PROCEDURE SP_CAMBIAR_ESTADO_USUARIO(
+	p_id_usuario IN NUMBER,
+	p_estado     IN VARCHAR2
+    );
+
+    PROCEDURE SP_LISTAR_USUARIOS(
+	p_cursor OUT SYS_REFCURSOR
+    );
+END LEHZ_PKG_SEGURIDAD;
+/
+CREATE OR REPLACE PACKAGE BODY "LEHZ_PKG_SEGURIDAD" AS
+
+    FUNCTION FN_VALIDAR_LOGIN(
+	p_username IN VARCHAR2,
+	p_password IN VARCHAR2
+    ) RETURN SYS_REFCURSOR IS
+	v_cursor SYS_REFCURSOR;
+	v_hash	 VARCHAR2(128);
+    BEGIN
+	SELECT RAWTOHEX(STANDARD_HASH(p_password, 'SHA256'))
+	INTO v_hash
+	FROM DUAL;
+
+	OPEN v_cursor FOR
+	    SELECT u.ID_USUARIO,
+		   u.USERNAME,
+		   u.NOMBRE_COMPLETO,
+		   u.EMAIL,
+		   r.ID_ROL,
+		   r.NOMBRE_ROL
+	    FROM LEHZ_USUARIO u
+	    INNER JOIN LEHZ_ROL r ON u.ID_ROL = r.ID_ROL
+	    WHERE LOWER(u.USERNAME) = LOWER(TRIM(p_username))
+	      AND u.PASSWORD_HASH = v_hash
+	      AND u.ESTADO = 'ACTIVO';
+
+	RETURN v_cursor;
+    END FN_VALIDAR_LOGIN;
+
+    PROCEDURE SP_CREAR_USUARIO(
+	p_username	  IN VARCHAR2,
+	p_password	  IN VARCHAR2,
+	p_nombre_completo IN VARCHAR2,
+	p_email 	  IN VARCHAR2,
+	p_id_rol	  IN NUMBER,
+	p_id_generado	  OUT NUMBER
+    ) IS
+	v_hash VARCHAR2(128);
+    BEGIN
+	SELECT RAWTOHEX(STANDARD_HASH(p_password, 'SHA256'))
+	INTO v_hash
+	FROM DUAL;
+
+	p_id_generado := LEHZ_SEQ_USUARIO.NEXTVAL;
+
+	INSERT INTO LEHZ_USUARIO (
+	    ID_USUARIO, USERNAME, PASSWORD_HASH, NOMBRE_COMPLETO, EMAIL, ESTADO, ID_ROL
+	) VALUES (
+	    p_id_generado, TRIM(p_username), v_hash, TRIM(p_nombre_completo), TRIM(p_email), 'ACTIVO', p_id_rol
+	);
+
+	COMMIT;
+    EXCEPTION
+	WHEN DUP_VAL_ON_INDEX THEN
+	    ROLLBACK;
+	    RAISE_APPLICATION_ERROR(-20001, 'El nombre de usuario ya existe en el sistema.');
+	WHEN OTHERS THEN
+	    ROLLBACK;
+	    RAISE;
+    END SP_CREAR_USUARIO;
+
+    PROCEDURE SP_CAMBIAR_ESTADO_USUARIO(
+	p_id_usuario IN NUMBER,
+	p_estado     IN VARCHAR2
+    ) IS
+    BEGIN
+	UPDATE LEHZ_USUARIO
+	SET ESTADO = UPPER(TRIM(p_estado))
+	WHERE ID_USUARIO = p_id_usuario;
+
+	IF SQL%ROWCOUNT = 0 THEN
+	    RAISE_APPLICATION_ERROR(-20002, 'No se encontro el usuario especificado.');
+	END IF;
+
+	COMMIT;
+    EXCEPTION
+	WHEN OTHERS THEN
+	    ROLLBACK;
+	    RAISE;
+    END SP_CAMBIAR_ESTADO_USUARIO;
+
+    PROCEDURE SP_LISTAR_USUARIOS(
+	p_cursor OUT SYS_REFCURSOR
+    ) IS
+    BEGIN
+	OPEN p_cursor FOR
+	    SELECT u.ID_USUARIO,
+		   u.USERNAME,
+		   u.NOMBRE_COMPLETO,
+		   u.EMAIL,
+		   u.ESTADO,
+		   r.ID_ROL,
+		   r.NOMBRE_ROL,
+		   u.FECHA_CREACION
+	    FROM LEHZ_USUARIO u
+	    INNER JOIN LEHZ_ROL r ON u.ID_ROL = r.ID_ROL
+	    ORDER BY u.ID_USUARIO ASC;
+    END SP_LISTAR_USUARIOS;
+END LEHZ_PKG_SEGURIDAD;
+/
+CREATE OR REPLACE FUNCTION "LEHZ_FN_CALCULAR_TARIFA" (
+    p_id_viaje		 IN NUMBER,
+    p_id_terminal_bajada IN NUMBER DEFAULT NULL
+) RETURN NUMBER IS
+    v_patente VARCHAR2(8);
+BEGIN
+    SELECT c.PATENTE_BUS
+      INTO v_patente
+      FROM LEHZ_CONDUCE c
+     WHERE c.ID_VIAJE = p_id_viaje
+       AND ROWNUM = 1;
+
+    RETURN LEHZ_FN_CALCULAR_TARIFA_BUS(p_id_viaje, v_patente, p_id_terminal_bajada);
+EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+	RAISE_APPLICATION_ERROR(-20103, 'El viaje no tiene un bus asignado; no es posible calcular la tarifa.');
+END;
+/
+CREATE OR REPLACE FUNCTION "LEHZ_FN_CALCULAR_TARIFA_BUS" (
+    p_id_viaje		 IN NUMBER,
+    p_patente_bus	 IN VARCHAR2,
+    p_id_terminal_bajada IN NUMBER DEFAULT NULL
+) RETURN NUMBER IS
+    v_base	 NUMBER;
+    v_id_ruta	 NUMBER;
+    v_destino	 NUMBER;
+    v_total_min  NUMBER;
+    v_orden	 NUMBER;
+    v_min_parada NUMBER;
+    v_ratio	 NUMBER;
+    v_tarifa	 NUMBER;
+BEGIN
+    SELECT b.TARIFA_BASE,
+	   v.ID_RUTA,
+	   r.ID_TERMINAL_DESTINO,
+	   NVL(r.HORAS_ESTIMADAS, 0) * 60 + NVL(r.MINUTOS_ESTIMADOS, 0)
+      INTO v_base, v_id_ruta, v_destino, v_total_min
+      FROM LEHZ_VIAJE v
+      INNER JOIN LEHZ_RUTA r ON r.ID_RUTA = v.ID_RUTA
+      INNER JOIN LEHZ_CONDUCE c ON c.ID_VIAJE = v.ID_VIAJE
+      INNER JOIN LEHZ_BUS b ON b.PATENTE_BUS = c.PATENTE_BUS
+     WHERE v.ID_VIAJE = p_id_viaje
+       AND c.PATENTE_BUS = UPPER(TRIM(p_patente_bus))
+       AND ROWNUM = 1;
+
+    IF p_id_terminal_bajada IS NULL OR p_id_terminal_bajada = v_destino THEN
+	RETURN v_base;
+    END IF;
+
+    SELECT rp.ORDEN_PARADA, rp.MINUTOS_DESDE_ORIG
+      INTO v_orden, v_min_parada
+      FROM LEHZ_RUTA_PARADA rp
+     WHERE rp.ID_RUTA = v_id_ruta
+       AND rp.ID_TERMINAL = p_id_terminal_bajada
+       AND rp.PERMITE_BAJADA = 'S';
+
+    IF v_orden = 1 THEN
+	RAISE_APPLICATION_ERROR(-20103, 'No se puede vender un boleto con bajada en el terminal de origen.');
+    END IF;
+
+    IF v_total_min IS NULL OR v_total_min <= 0 THEN
+	v_ratio := 1;
+    ELSE
+	v_ratio := v_min_parada / v_total_min;
+    END IF;
+
+    v_tarifa := ROUND(v_base * v_ratio, -2);
+    IF v_tarifa < 0 THEN
+	v_tarifa := 0;
+    END IF;
+    RETURN v_tarifa;
+EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+	RAISE_APPLICATION_ERROR(-20103, 'No se encontro el bus asignado al viaje o la parada de bajada no pertenece a la ruta.');
+END;
+/
+CREATE OR REPLACE FUNCTION "LEHZ_FN_NORMALIZAR_PATENTE" (
+    p_patente IN VARCHAR2
+) RETURN VARCHAR2 IS
+    v_pat VARCHAR2(10);
+BEGIN
+    IF p_patente IS NULL OR TRIM(p_patente) = '' THEN
+	RAISE_APPLICATION_ERROR(-20012, 'La patente del bus es obligatoria.');
+    END IF;
+
+    v_pat := UPPER(REGEXP_REPLACE(TRIM(p_patente), '[^A-Za-z0-9]', ''));
+
+    IF NOT REGEXP_LIKE(v_pat, '^([B-DF-HJ-NP-TV-Z]{4}[0-9]{2}|[A-Z]{2}[0-9]{4})$') THEN
+	RAISE_APPLICATION_ERROR(-20012, 'Patente invalida: use formato nuevo de 4 letras sin vocales + 2 digitos (ej. BCDF12) o formato antiguo de 2 letras + 4 digitos (ej. AB1234).');
+    END IF;
+
+    RETURN v_pat;
+END;
+/
+CREATE OR REPLACE FUNCTION "LEHZ_FN_NORMALIZAR_RUT" (
+    p_rut	   IN VARCHAR2,
+    p_tipo_entidad IN VARCHAR2
+) RETURN VARCHAR2 IS
+    v_original VARCHAR2(30);
+    v_clean    VARCHAR2(20);
+    v_cuerpo   VARCHAR2(15);
+    v_dv_ing   CHAR(1);
+    v_dv_calc  CHAR(1);
+    v_num      NUMBER;
+    v_suma     NUMBER := 0;
+    v_mult     NUMBER := 2;
+    v_resto    NUMBER;
+BEGIN
+    IF p_rut IS NULL OR TRIM(p_rut) = '' THEN
+	RAISE_APPLICATION_ERROR(-20010, 'El RUT es obligatorio.');
+    END IF;
+
+    v_original := UPPER(TRIM(p_rut));
+    v_clean    := UPPER(REGEXP_REPLACE(v_original, '[^0-9K]', ''));
+
+    IF LENGTH(v_clean) < 7 OR LENGTH(v_clean) > 9 THEN
+	RAISE_APPLICATION_ERROR(-20010, 'RUT invalido: debe tener 7 u 8 digitos mas su digito verificador (ej. 12.345.678-K).');
+    END IF;
+
+    -- Casos:
+    --	 Con guion: el ultimo caracter es el DV.
+    --	 Sin guion y 9 caracteres: los primeros 8 son el cuerpo y el ultimo el DV.
+    --	 Sin guion y 7 u 8 caracteres: el usuario no ingreso DV; se calcula.
+    IF INSTR(v_original, '-') > 0 OR SUBSTR(v_clean, -1, 1) = 'K' THEN
+	v_cuerpo := SUBSTR(v_clean, 1, LENGTH(v_clean) - 1);
+	v_dv_ing := SUBSTR(v_clean, -1, 1);
+    ELSIF LENGTH(v_clean) = 9 THEN
+	v_cuerpo := SUBSTR(v_clean, 1, 8);
+	v_dv_ing := SUBSTR(v_clean, 9, 1);
+    ELSE
+	v_cuerpo := v_clean;
+	v_dv_ing := NULL;
+    END IF;
+
+    IF LENGTH(v_cuerpo) < 7 OR LENGTH(v_cuerpo) > 8 THEN
+	RAISE_APPLICATION_ERROR(-20010, 'RUT invalido: el cuerpo debe tener 7 u 8 digitos.');
+    END IF;
+
+    IF NOT REGEXP_LIKE(v_cuerpo, '^[0-9]+$') THEN
+	RAISE_APPLICATION_ERROR(-20010, 'RUT invalido: el cuerpo del RUT solo debe contener numeros.');
+    END IF;
+
+    v_num := TO_NUMBER(v_cuerpo);
+
+    IF UPPER(p_tipo_entidad) = 'PERSONA' AND v_num >= 50000000 THEN
+	RAISE_APPLICATION_ERROR(-20010, 'RUT invalido para persona natural: los RUT iguales o superiores a 50.000.000 corresponden a empresas.');
+    ELSIF UPPER(p_tipo_entidad) = 'EMPRESA' AND v_num < 50000000 THEN
+	RAISE_APPLICATION_ERROR(-20010, 'RUT invalido para empresa: debe ser igual o superior a 50.000.000.');
+    END IF;
+
+    -- Calculo Modulo 11
+    FOR i IN REVERSE 1..LENGTH(v_cuerpo) LOOP
+	v_suma := v_suma + (TO_NUMBER(SUBSTR(v_cuerpo, i, 1)) * v_mult);
+	v_mult := CASE WHEN v_mult = 7 THEN 2 ELSE v_mult + 1 END;
+    END LOOP;
+
+    v_resto   := 11 - MOD(v_suma, 11);
+    v_dv_calc := CASE v_resto WHEN 11 THEN '0' WHEN 10 THEN 'K' ELSE TO_CHAR(v_resto) END;
+
+    IF v_dv_ing IS NOT NULL AND v_dv_ing <> v_dv_calc THEN
+	RAISE_APPLICATION_ERROR(-20010, 'RUT invalido: el digito verificador ingresado (' || v_dv_ing || ') no corresponde; deberia ser ' || v_dv_calc || '.');
+    END IF;
+
+    RETURN TO_CHAR(v_num, 'FM99999999') || '-' || v_dv_calc;
+END;
+/
+CREATE OR REPLACE FUNCTION "LEHZ_FN_NORMALIZAR_TEXTO" (
+    p_texto IN VARCHAR2
+) RETURN VARCHAR2 DETERMINISTIC IS
+BEGIN
+    IF p_texto IS NULL THEN
+	RETURN NULL;
+    END IF;
+    RETURN INITCAP(LOWER(REGEXP_REPLACE(TRIM(p_texto), '[[:space:]]+', ' ')));
+END;
+/
+CREATE OR REPLACE FUNCTION "LEHZ_FN_ROL_PERMITE" (
+    p_rol    IN VARCHAR2,
+    p_modulo IN VARCHAR2
+) RETURN CHAR IS
+    v_count NUMBER := 0;
+BEGIN
+    SELECT COUNT(*)
+      INTO v_count
+      FROM LEHZ_VW_MENU_ROL
+     WHERE NOMBRE_ROL = UPPER(TRIM(p_rol))
+       AND CODIGO = LOWER(TRIM(p_modulo));
+
+    RETURN CASE WHEN v_count > 0 THEN 'S' ELSE 'N' END;
+END LEHZ_FN_ROL_PERMITE;
+/
+CREATE OR REPLACE FUNCTION "LEHZ_FN_VALIDAR_PASSWORD" (
+    p_password IN VARCHAR2
+) RETURN VARCHAR2 IS
+BEGIN
+    IF p_password IS NULL OR LENGTH(p_password) < 8 OR LENGTH(p_password) > 16 THEN
+	RETURN 'La contrasena debe tener entre 8 y 16 caracteres.';
+    END IF;
+    IF NOT REGEXP_LIKE(p_password, '[A-Z]') THEN
+	RETURN 'La contrasena debe incluir al menos una letra mayuscula.';
+    END IF;
+    IF NOT REGEXP_LIKE(p_password, '[a-z]') THEN
+	RETURN 'La contrasena debe incluir al menos una letra minuscula.';
+    END IF;
+    IF NOT REGEXP_LIKE(p_password, '[0-9]') THEN
+	RETURN 'La contrasena debe incluir al menos un numero.';
+    END IF;
+    IF NOT REGEXP_LIKE(p_password, '[^A-Za-z0-9]') THEN
+	RETURN 'La contrasena debe incluir al menos un caracter especial (ej: @, #, $, %, !, .).';
+    END IF;
+    RETURN 'OK';
+END;
+/
+CREATE OR REPLACE FUNCTION "LEHZ_FN_VALIDAR_RUT_CL" (
+    p_rut	   IN VARCHAR2,
+    p_tipo_entidad IN VARCHAR2
+) RETURN VARCHAR2 IS
+BEGIN
+    RETURN LEHZ_FN_NORMALIZAR_RUT(p_rut, p_tipo_entidad);
+END;
+/
+CREATE OR REPLACE FUNCTION "LEHZ_FN_VALIDAR_TEL_CL" (
+    p_telefono	   IN VARCHAR2,
+    p_tipo_entidad IN VARCHAR2
+) RETURN VARCHAR2 IS
+    v_digits VARCHAR2(20);
+    v_tel    VARCHAR2(20);
+BEGIN
+    IF p_telefono IS NULL OR TRIM(p_telefono) = '' THEN
+	RETURN NULL;
+    END IF;
+
+    v_digits := REGEXP_REPLACE(TRIM(p_telefono), '[^0-9]', '');
+
+    IF UPPER(p_tipo_entidad) = 'PERSONA' THEN
+	IF LENGTH(v_digits) = 9 AND SUBSTR(v_digits, 1, 1) = '9' THEN
+	    v_tel := '+56' || v_digits;
+	ELSIF LENGTH(v_digits) = 11 AND SUBSTR(v_digits, 1, 2) = '56'
+	      AND SUBSTR(v_digits, 3, 1) = '9' THEN
+	    v_tel := '+' || v_digits;
+	ELSE
+	    v_tel := v_digits;
+	END IF;
+
+	IF NOT REGEXP_LIKE(v_tel, '^\+569[0-9]{8}$') THEN
+	    RAISE_APPLICATION_ERROR(-20011, 'Telefono personal invalido: debe tener formato movil chileno +569 seguido de 8 digitos (ej. +56912345678).');
+	END IF;
+    ELSE
+	-- Los numeros 600 y 809 son nacionales y NO llevan +56.
+	IF LENGTH(v_digits) = 9 AND SUBSTR(v_digits, 1, 3) IN ('600', '809') THEN
+	    v_tel := v_digits;
+	ELSIF LENGTH(v_digits) = 9 AND SUBSTR(v_digits, 1, 1) BETWEEN '2' AND '9' THEN
+	    v_tel := '+56' || v_digits;
+	ELSIF LENGTH(v_digits) = 11 AND SUBSTR(v_digits, 1, 2) = '56'
+	      AND SUBSTR(v_digits, 3, 1) BETWEEN '2' AND '9' THEN
+	    v_tel := '+' || v_digits;
+	ELSE
+	    v_tel := v_digits;
+	END IF;
+
+	IF NOT REGEXP_LIKE(v_tel, '^(\+56[2-9][0-9]{8}|600[0-9]{6}|809[0-9]{6})$') THEN
+	    RAISE_APPLICATION_ERROR(-20011, 'Telefono de empresa invalido: use +56 + 9 digitos, o un numero 600/809 de 9 digitos (ej. +56712345678, 600123456, 809123456).');
+	END IF;
+    END IF;
+
+    RETURN v_tel;
+END;
+/
+CREATE OR REPLACE PROCEDURE "LEHZ_PS_CAMBIAR_ESTADO_USUARIO" (
+    p_id_usuario IN NUMBER,
+    p_estado	 IN VARCHAR2
+) IS
+BEGIN
+    IF UPPER(TRIM(p_estado)) NOT IN ('ACTIVO', 'INACTIVO') THEN
+	RAISE_APPLICATION_ERROR(-20003, 'Estado de usuario invalido: use ACTIVO o INACTIVO.');
+    END IF;
+
+    UPDATE LEHZ_USUARIO
+       SET ESTADO = UPPER(TRIM(p_estado))
+     WHERE ID_USUARIO = p_id_usuario;
+
+    IF SQL%ROWCOUNT = 0 THEN
+	RAISE_APPLICATION_ERROR(-20002, 'No se encontro el usuario especificado.');
+    END IF;
+
+    COMMIT;
+EXCEPTION
+    WHEN OTHERS THEN
+	ROLLBACK;
+	RAISE;
+END LEHZ_PS_CAMBIAR_ESTADO_USUARIO;
+/
+CREATE OR REPLACE PROCEDURE "LEHZ_PS_CREAR_USUARIO_ADMIN" (
+    p_username	       IN  VARCHAR2,
+    p_password	       IN  VARCHAR2,
+    p_password_confirm IN  VARCHAR2,
+    p_nombre_completo  IN  VARCHAR2,
+    p_email	       IN  VARCHAR2,
+    p_rol	       IN  VARCHAR2,
+    p_estado	       OUT VARCHAR2,
+    p_mensaje	       OUT VARCHAR2
+) IS
+BEGIN
+    IF p_password IS NULL OR p_password_confirm IS NULL
+       OR p_password <> p_password_confirm THEN
+	p_estado  := 'ADVERTENCIA';
+	p_mensaje := 'Las contrasenas no coinciden. Escribe la misma clave en ambos campos.';
+	RETURN;
+    END IF;
+
+    LEHZ_PS_CREAR_USUARIO_SEGURO(
+	p_username, p_password, p_nombre_completo, p_email,
+	p_rol, 'ADMINISTRADOR', p_estado, p_mensaje
+    );
+END LEHZ_PS_CREAR_USUARIO_ADMIN;
+/
+CREATE OR REPLACE PROCEDURE "LEHZ_PS_CREAR_USUARIO_SEGURO" (
+    p_username	      IN  VARCHAR2,
+    p_password	      IN  VARCHAR2,
+    p_nombre_completo IN  VARCHAR2,
+    p_email	      IN  VARCHAR2,
+    p_rol_solicitado  IN  VARCHAR2,
+    p_rol_ejecutor    IN  VARCHAR2,
+    p_estado	      OUT VARCHAR2,
+    p_mensaje	      OUT VARCHAR2
+) IS
+    v_val_pass	VARCHAR2(200);
+    v_id_rol	NUMBER;
+    v_rol_final VARCHAR2(30);
+BEGIN
+    IF p_username IS NULL OR TRIM(p_username) = '' THEN
+	p_estado  := 'ADVERTENCIA';
+	p_mensaje := 'El nombre de usuario es obligatorio.';
+	RETURN;
+    END IF;
+    IF p_nombre_completo IS NULL OR TRIM(p_nombre_completo) = '' THEN
+	p_estado  := 'ADVERTENCIA';
+	p_mensaje := 'El nombre completo es obligatorio.';
+	RETURN;
+    END IF;
+    IF p_email IS NOT NULL
+       AND NOT REGEXP_LIKE(TRIM(p_email), '^[^@]+@[^@]+\.[^@]{2,}$') THEN
+	p_estado  := 'ADVERTENCIA';
+	p_mensaje := 'El correo electronico no tiene un formato valido (ej. usuario@dominio.cl).';
+	RETURN;
+    END IF;
+
+    v_val_pass := LEHZ_FN_VALIDAR_PASSWORD(p_password);
+    IF v_val_pass <> 'OK' THEN
+	p_estado  := 'ADVERTENCIA';
+	p_mensaje := v_val_pass;
+	RETURN;
+    END IF;
+
+    -- Solo un ADMINISTRADOR puede crear cuentas con privilegios superiores.
+    -- Un formulario publico siempre crea VENDEDOR.
+    IF UPPER(NVL(p_rol_ejecutor, 'PUBLICO')) <> 'ADMINISTRADOR' THEN
+	v_rol_final := 'VENDEDOR';
+    ELSE
+	v_rol_final := NVL(UPPER(TRIM(p_rol_solicitado)), 'VENDEDOR');
+    END IF;
+
+    SELECT ID_ROL INTO v_id_rol
+    FROM LEHZ_ROL
+    WHERE NOMBRE_ROL = v_rol_final;
+
+    INSERT INTO LEHZ_USUARIO (
+	ID_USUARIO, USERNAME, PASSWORD_HASH, NOMBRE_COMPLETO, EMAIL, ESTADO, ID_ROL
+    ) VALUES (
+	LEHZ_SEQ_USUARIO.NEXTVAL,
+	LOWER(TRIM(p_username)),
+	RAWTOHEX(STANDARD_HASH(p_password, 'SHA256')),
+	INITCAP(TRIM(p_nombre_completo)),
+	LOWER(TRIM(p_email)),
+	'ACTIVO',
+	v_id_rol
+    );
+
+    COMMIT;
+    p_estado  := 'OK';
+    p_mensaje := 'Usuario ' || LOWER(TRIM(p_username)) || ' creado correctamente con rol ' || v_rol_final || '.';
+
+EXCEPTION
+    WHEN DUP_VAL_ON_INDEX THEN
+	ROLLBACK;
+	p_estado  := 'ADVERTENCIA';
+	p_mensaje := 'El nombre de usuario "' || p_username || '" ya existe. Elige otro para continuar.';
+    WHEN NO_DATA_FOUND THEN
+	ROLLBACK;
+	p_estado  := 'ADVERTENCIA';
+	p_mensaje := 'El rol solicitado no existe.';
+    WHEN OTHERS THEN
+	ROLLBACK;
+	p_estado  := 'ERROR';
+	p_mensaje := 'No se pudo registrar el usuario: ' || SQLERRM;
+END;
+/
+CREATE OR REPLACE PROCEDURE "LEHZ_PS_GES_ANULAR_BOLETO" (
+    p_id_boleto  IN NUMBER,
+    p_motivo	 IN VARCHAR2,
+    p_estado_out OUT VARCHAR2
+) IS
+    v_estado VARCHAR2(10);
+BEGIN
+    LOCK TABLE LEHZ_BOLETO IN EXCLUSIVE MODE;
+
+    IF p_id_boleto IS NULL OR p_id_boleto <= 0 THEN
+	RAISE_APPLICATION_ERROR(-20106, 'Debe indicar el boleto a anular.');
+    END IF;
+    IF p_motivo IS NULL OR TRIM(p_motivo) = '' THEN
+	RAISE_APPLICATION_ERROR(-20106, 'Debe indicar el motivo de la anulacion.');
+    END IF;
+
+    SELECT ESTADO INTO v_estado FROM LEHZ_BOLETO WHERE ID_BOLETO = p_id_boleto;
+
+    IF v_estado = 'ANULADO' THEN
+	RAISE_APPLICATION_ERROR(-20106, 'El boleto ya se encuentra anulado.');
+    END IF;
+    IF v_estado = 'USADO' THEN
+	RAISE_APPLICATION_ERROR(-20106, 'No se puede anular un boleto que ya fue utilizado.');
+    END IF;
+
+    UPDATE LEHZ_BOLETO
+       SET ESTADO = 'ANULADO',
+	   FECHA_ANULACION = SYSDATE,
+	   MOTIVO_ANULACION = TRIM(p_motivo)
+     WHERE ID_BOLETO = p_id_boleto;
+
+    COMMIT;
+    p_estado_out := 'ANULADO';
+EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+	ROLLBACK;
+	RAISE_APPLICATION_ERROR(-20106, 'No se encontro el boleto indicado.');
+    WHEN OTHERS THEN
+	ROLLBACK;
+	RAISE;
+END LEHZ_PS_GES_ANULAR_BOLETO;
+/
+CREATE OR REPLACE PROCEDURE "LEHZ_PS_GES_ASIGNAR_CONDUCE" (
+    p_rut_conductor IN VARCHAR2,
+    p_patente_bus   IN VARCHAR2,
+    p_id_viaje	    IN NUMBER,
+    p_opcion	    IN VARCHAR2 DEFAULT 'I'
+) IS
+    v_rut     VARCHAR2(12);
+    v_patente VARCHAR2(8);
+    v_count   NUMBER := 0;
+BEGIN
+    LOCK TABLE LEHZ_CONDUCE IN EXCLUSIVE MODE;
+    v_rut     := LEHZ_FN_NORMALIZAR_RUT(p_rut_conductor, 'PERSONA');
+    v_patente := LEHZ_FN_NORMALIZAR_PATENTE(p_patente_bus);
+
+    IF p_id_viaje IS NULL OR p_id_viaje <= 0 THEN
+	RAISE_APPLICATION_ERROR(-20120, 'Debe seleccionar un viaje valido.');
+    END IF;
+
+    IF UPPER(TRIM(p_opcion)) = 'I' THEN
+	SELECT COUNT(*) INTO v_count FROM LEHZ_CONDUCTOR WHERE RUT_CONDUCTOR = v_rut;
+	IF v_count = 0 THEN
+	    RAISE_APPLICATION_ERROR(-20121, 'El conductor no existe.');
+	END IF;
+
+	SELECT COUNT(*) INTO v_count FROM LEHZ_BUS WHERE PATENTE_BUS = v_patente;
+	IF v_count = 0 THEN
+	    RAISE_APPLICATION_ERROR(-20122, 'El bus no existe.');
+	END IF;
+
+	SELECT COUNT(*) INTO v_count FROM LEHZ_VIAJE WHERE ID_VIAJE = p_id_viaje;
+	IF v_count = 0 THEN
+	    RAISE_APPLICATION_ERROR(-20123, 'El viaje no existe.');
+	END IF;
+
+	INSERT INTO LEHZ_CONDUCE (RUT_CONDUCTOR, PATENTE_BUS, ID_VIAJE)
+	VALUES (v_rut, v_patente, p_id_viaje);
+
+    ELSIF UPPER(TRIM(p_opcion)) = 'D' THEN
+	DELETE FROM LEHZ_CONDUCE
+	 WHERE RUT_CONDUCTOR = v_rut
+	   AND PATENTE_BUS = v_patente
+	   AND ID_VIAJE = p_id_viaje;
+
+	IF SQL%ROWCOUNT = 0 THEN
+	    RAISE_APPLICATION_ERROR(-20125, 'No se encontro la asignacion a eliminar.');
+	END IF;
+
+    ELSE
+	RAISE_APPLICATION_ERROR(-20120, 'Operacion invalida. Use I o D.');
+    END IF;
+
+    COMMIT;
+EXCEPTION
+    WHEN DUP_VAL_ON_INDEX THEN
+	ROLLBACK;
+	RAISE_APPLICATION_ERROR(-20124, 'Este conductor o bus ya se encuentra asignado a este viaje.');
+    WHEN OTHERS THEN
+	ROLLBACK;
+	RAISE;
+END LEHZ_PS_GES_ASIGNAR_CONDUCE;
+/
+CREATE OR REPLACE PROCEDURE "LEHZ_PS_GES_ASOCIAR_TERMINAL" (
+    p_id_terminal IN NUMBER,
+    p_rut_empresa IN VARCHAR2,
+    p_opcion	  IN VARCHAR2 DEFAULT 'I'
+) IS
+    v_rut   VARCHAR2(12);
+    v_count NUMBER := 0;
+BEGIN
+    LOCK TABLE LEHZ_UTILIZAN IN EXCLUSIVE MODE;
+    v_rut := LEHZ_FN_NORMALIZAR_RUT(p_rut_empresa, 'EMPRESA');
+
+    IF p_id_terminal IS NULL OR p_id_terminal <= 0 THEN
+	RAISE_APPLICATION_ERROR(-20140, 'Debe seleccionar un terminal valido.');
+    END IF;
+
+    SELECT COUNT(*) INTO v_count FROM LEHZ_TERMINAL WHERE ID_TERMINAL = p_id_terminal;
+    IF v_count = 0 THEN
+	RAISE_APPLICATION_ERROR(-20141, 'El terminal no existe.');
+    END IF;
+
+    SELECT COUNT(*) INTO v_count FROM LEHZ_EMPRESA WHERE RUT_EMPRESA = v_rut;
+    IF v_count = 0 THEN
+	RAISE_APPLICATION_ERROR(-20142, 'La empresa no existe.');
+    END IF;
+
+    IF UPPER(TRIM(p_opcion)) = 'I' THEN
+	INSERT INTO LEHZ_UTILIZAN (ID_TERMINAL, RUT_EMPRESA)
+	VALUES (p_id_terminal, v_rut);
+
+    ELSIF UPPER(TRIM(p_opcion)) = 'D' THEN
+	DELETE FROM LEHZ_UTILIZAN
+	 WHERE ID_TERMINAL = p_id_terminal
+	   AND RUT_EMPRESA = v_rut;
+
+	IF SQL%ROWCOUNT = 0 THEN
+	    RAISE_APPLICATION_ERROR(-20144, 'No se encontro la asociacion a eliminar.');
+	END IF;
+
+    ELSE
+	RAISE_APPLICATION_ERROR(-20140, 'Operacion invalida. Use I o D.');
+    END IF;
+
+    COMMIT;
+EXCEPTION
+    WHEN DUP_VAL_ON_INDEX THEN
+	ROLLBACK;
+	RAISE_APPLICATION_ERROR(-20143, 'Esta asociacion entre terminal y empresa ya existe.');
+    WHEN OTHERS THEN
+	ROLLBACK;
+	RAISE;
+END LEHZ_PS_GES_ASOCIAR_TERMINAL;
+/
+CREATE OR REPLACE PROCEDURE "LEHZ_PS_GES_LISTAR_BAJADAS" (
+    p_cursor OUT SYS_REFCURSOR
+) IS
+BEGIN
+    OPEN p_cursor FOR
+	SELECT pb.ID_BAJADA, pb.ID_BOLETO, pb.ID_TERMINAL_BAJADA,
+	       t.NOMBRE AS TERMINAL, pb.OBSERVACION, pb.FECHA_REGISTRO
+	  FROM LEHZ_PASAJE_BAJADA pb
+	  INNER JOIN LEHZ_TERMINAL t ON t.ID_TERMINAL = pb.ID_TERMINAL_BAJADA
+	 ORDER BY pb.ID_BAJADA DESC;
+END LEHZ_PS_GES_LISTAR_BAJADAS;
+/
+CREATE OR REPLACE PROCEDURE "LEHZ_PS_GES_MARCAR_BOLETO_USADO" (
+    p_id_boleto  IN NUMBER,
+    p_estado_out OUT VARCHAR2
+) IS
+    v_estado VARCHAR2(10);
+BEGIN
+    LOCK TABLE LEHZ_BOLETO IN EXCLUSIVE MODE;
+
+    IF p_id_boleto IS NULL OR p_id_boleto <= 0 THEN
+	RAISE_APPLICATION_ERROR(-20107, 'Debe indicar el boleto a marcar como usado.');
+    END IF;
+
+    SELECT ESTADO INTO v_estado FROM LEHZ_BOLETO WHERE ID_BOLETO = p_id_boleto;
+
+    IF v_estado = 'ANULADO' THEN
+	RAISE_APPLICATION_ERROR(-20107, 'No se puede usar un boleto anulado.');
+    END IF;
+    IF v_estado = 'USADO' THEN
+	RAISE_APPLICATION_ERROR(-20107, 'El boleto ya fue marcado como usado.');
+    END IF;
+
+    UPDATE LEHZ_BOLETO
+       SET ESTADO = 'USADO'
+     WHERE ID_BOLETO = p_id_boleto
+       AND ESTADO = 'EMITIDO';
+
+    COMMIT;
+    p_estado_out := 'USADO';
+EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+	ROLLBACK;
+	RAISE_APPLICATION_ERROR(-20107, 'No se encontro el boleto indicado.');
+    WHEN OTHERS THEN
+	ROLLBACK;
+	RAISE;
+END LEHZ_PS_GES_MARCAR_BOLETO_USADO;
+/
+CREATE OR REPLACE PROCEDURE "LEHZ_PS_GES_PROGRAMAR_VIAJE" (
+    p_fecha_viaje  IN DATE,
+    p_id_horario   IN NUMBER,
+    p_id_ruta	   IN NUMBER,
+    p_id_viaje_out OUT NUMBER
+) IS
+    v_count NUMBER := 0;
+BEGIN
+    LOCK TABLE LEHZ_VIAJE IN EXCLUSIVE MODE;
+
+    IF p_fecha_viaje IS NULL THEN
+	RAISE_APPLICATION_ERROR(-20110, 'La fecha del viaje es obligatoria.');
+    END IF;
+    IF TRUNC(p_fecha_viaje) < TRUNC(SYSDATE) THEN
+	RAISE_APPLICATION_ERROR(-20110, 'La fecha del viaje no puede ser anterior a hoy.');
+    END IF;
+    IF p_id_horario IS NULL OR p_id_horario <= 0 THEN
+	RAISE_APPLICATION_ERROR(-20110, 'Debe seleccionar un horario valido.');
+    END IF;
+    IF p_id_ruta IS NULL OR p_id_ruta <= 0 THEN
+	RAISE_APPLICATION_ERROR(-20110, 'Debe seleccionar una ruta valida.');
+    END IF;
+
+    SELECT COUNT(*) INTO v_count FROM LEHZ_RUTA WHERE ID_RUTA = p_id_ruta;
+    IF v_count = 0 THEN
+	RAISE_APPLICATION_ERROR(-20111, 'La ruta especificada no existe.');
+    END IF;
+
+    SELECT COUNT(*) INTO v_count FROM LEHZ_HORARIO WHERE ID_HORARIO = p_id_horario;
+    IF v_count = 0 THEN
+	RAISE_APPLICATION_ERROR(-20112, 'El horario especificado no existe.');
+    END IF;
+
+    SELECT COUNT(*) INTO v_count
+      FROM LEHZ_VIAJE
+     WHERE TRUNC(FECHA_VIAJE) = TRUNC(p_fecha_viaje)
+       AND ID_HORARIO = p_id_horario
+       AND ID_RUTA = p_id_ruta;
+    IF v_count > 0 THEN
+	RAISE_APPLICATION_ERROR(-20113, 'Ya existe un viaje programado para esa ruta, fecha y horario.');
+    END IF;
+
+    p_id_viaje_out := LEHZ_SEQ_VIAJE.NEXTVAL;
+
+    INSERT INTO LEHZ_VIAJE (ID_VIAJE, FECHA_VIAJE, ID_HORARIO, ID_RUTA)
+    VALUES (p_id_viaje_out, TRUNC(p_fecha_viaje), p_id_horario, p_id_ruta);
+
+    COMMIT;
+EXCEPTION
+    WHEN DUP_VAL_ON_INDEX THEN
+	ROLLBACK;
+	RAISE_APPLICATION_ERROR(-20113, 'Ya existe un viaje programado para esa ruta, fecha y horario.');
+    WHEN OTHERS THEN
+	ROLLBACK;
+	RAISE;
+END LEHZ_PS_GES_PROGRAMAR_VIAJE;
+/
+CREATE OR REPLACE PROCEDURE "LEHZ_PS_GES_REGISTRAR_BAJADA" (
+    p_id_boleto 	 IN NUMBER,
+    p_id_terminal_bajada IN NUMBER,
+    p_observacion	 IN VARCHAR2 DEFAULT NULL
+) IS
+    v_count  NUMBER := 0;
+    v_estado VARCHAR2(10);
+    v_nombre VARCHAR2(80);
+BEGIN
+    LOCK TABLE LEHZ_PASAJE_BAJADA IN EXCLUSIVE MODE;
+
+    IF p_id_boleto IS NULL OR p_id_boleto <= 0 THEN
+	RAISE_APPLICATION_ERROR(-20150, 'Debe indicar un boleto valido.');
+    END IF;
+    IF p_id_terminal_bajada IS NULL OR p_id_terminal_bajada <= 0 THEN
+	RAISE_APPLICATION_ERROR(-20150, 'Debe seleccionar una parada de bajada valida.');
+    END IF;
+
+    SELECT ESTADO INTO v_estado FROM LEHZ_BOLETO WHERE ID_BOLETO = p_id_boleto;
+    IF v_estado = 'ANULADO' THEN
+	RAISE_APPLICATION_ERROR(-20150, 'No se puede registrar una bajada para un boleto anulado.');
+    END IF;
+
+    SELECT NOMBRE INTO v_nombre FROM LEHZ_TERMINAL WHERE ID_TERMINAL = p_id_terminal_bajada;
+
+    SELECT COUNT(*)
+      INTO v_count
+      FROM LEHZ_BOLETO b
+      INNER JOIN LEHZ_VIAJE v ON v.ID_VIAJE = b.ID_VIAJE
+      INNER JOIN LEHZ_RUTA_PARADA rp ON rp.ID_RUTA = v.ID_RUTA
+     WHERE b.ID_BOLETO = p_id_boleto
+       AND rp.ID_TERMINAL = p_id_terminal_bajada
+       AND rp.PERMITE_BAJADA = 'S'
+       AND rp.ORDEN_PARADA > 1;
+    IF v_count = 0 THEN
+	RAISE_APPLICATION_ERROR(-20150, 'La parada seleccionada no pertenece al recorrido del boleto o no permite bajada.');
+    END IF;
+
+    SELECT COUNT(*) INTO v_count FROM LEHZ_PASAJE_BAJADA WHERE ID_BOLETO = p_id_boleto;
+
+    IF v_count = 0 THEN
+	INSERT INTO LEHZ_PASAJE_BAJADA (
+	    ID_BAJADA, ID_BOLETO, ID_TERMINAL_BAJADA, OBSERVACION, FECHA_REGISTRO
+	) VALUES (
+	    LEHZ_SEQ_PASAJE_BAJADA.NEXTVAL, p_id_boleto, p_id_terminal_bajada,
+	    NVL(LEHZ_FN_NORMALIZAR_TEXTO(p_observacion), 'Bajada en ' || v_nombre), SYSDATE
+	);
+    ELSE
+	UPDATE LEHZ_PASAJE_BAJADA
+	   SET ID_TERMINAL_BAJADA = p_id_terminal_bajada,
+	       OBSERVACION = NVL(LEHZ_FN_NORMALIZAR_TEXTO(p_observacion), 'Bajada en ' || v_nombre)
+	 WHERE ID_BOLETO = p_id_boleto;
+    END IF;
+
+    COMMIT;
+EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+	ROLLBACK;
+	RAISE_APPLICATION_ERROR(-20150, 'El boleto o el terminal de bajada no existe.');
+    WHEN OTHERS THEN
+	ROLLBACK;
+	RAISE;
+END LEHZ_PS_GES_REGISTRAR_BAJADA;
+/
+CREATE OR REPLACE PROCEDURE "LEHZ_PS_GES_REGISTRAR_MANTENCION" (
+    p_fecha	   IN DATE,
+    p_descripcion  IN VARCHAR2,
+    p_costo	   IN NUMBER,
+    p_rut_mecanico IN VARCHAR2,
+    p_patente_bus  IN VARCHAR2,
+    p_id_mant_out  OUT NUMBER
+) IS
+    v_rut     VARCHAR2(12);
+    v_patente VARCHAR2(8);
+    v_count   NUMBER := 0;
+BEGIN
+    LOCK TABLE LEHZ_MANTENCION IN EXCLUSIVE MODE;
+    v_rut     := LEHZ_FN_NORMALIZAR_RUT(p_rut_mecanico, 'PERSONA');
+    v_patente := LEHZ_FN_NORMALIZAR_PATENTE(p_patente_bus);
+
+    IF p_fecha IS NULL THEN
+	RAISE_APPLICATION_ERROR(-20130, 'La fecha de la mantencion es obligatoria.');
+    END IF;
+    IF TRUNC(p_fecha) > TRUNC(SYSDATE) THEN
+	RAISE_APPLICATION_ERROR(-20130, 'La fecha de la mantencion no puede ser futura.');
+    END IF;
+    IF p_descripcion IS NULL OR TRIM(p_descripcion) = '' THEN
+	RAISE_APPLICATION_ERROR(-20130, 'La descripcion de la mantencion es obligatoria.');
+    END IF;
+    IF p_costo IS NULL OR p_costo < 0 THEN
+	RAISE_APPLICATION_ERROR(-20130, 'El costo de la mantencion debe ser mayor o igual a cero.');
+    END IF;
+
+    SELECT COUNT(*) INTO v_count FROM LEHZ_MECANICO WHERE RUT_MECANICO = v_rut;
+    IF v_count = 0 THEN
+	RAISE_APPLICATION_ERROR(-20131, 'El mecanico no existe.');
+    END IF;
+
+    SELECT COUNT(*) INTO v_count FROM LEHZ_BUS WHERE PATENTE_BUS = v_patente;
+    IF v_count = 0 THEN
+	RAISE_APPLICATION_ERROR(-20132, 'El bus no existe.');
+    END IF;
+
+    p_id_mant_out := LEHZ_SEQ_MANTENCION.NEXTVAL;
+
+    INSERT INTO LEHZ_MANTENCION (
+	ID_MANTENCION, FECHA_MANTENCION, DESCRIPCION_MANTENCION,
+	COSTO_MANTENCION, RUT_MECANICO, PATENTE_BUS
+    ) VALUES (
+	p_id_mant_out, TRUNC(p_fecha), LEHZ_FN_NORMALIZAR_TEXTO(p_descripcion),
+	p_costo, v_rut, v_patente
+    );
+
+    COMMIT;
+EXCEPTION
+    WHEN OTHERS THEN
+	ROLLBACK;
+	IF SQLCODE = -2291 THEN
+	    RAISE_APPLICATION_ERROR(-20132, 'El mecanico o el bus seleccionado no existe.');
+	END IF;
+	RAISE;
+END LEHZ_PS_GES_REGISTRAR_MANTENCION;
+/
+CREATE OR REPLACE PROCEDURE "LEHZ_PS_GES_VENDER_BOLETO" (
+    p_rut_pasajero	 IN VARCHAR2,
+    p_id_viaje		 IN NUMBER,
+    p_numero_asiento	 IN NUMBER,
+    p_patente_bus	 IN VARCHAR2,
+    p_metodo_pago	 IN VARCHAR2,
+    p_id_terminal_bajada IN NUMBER DEFAULT NULL,
+    p_id_boleto_out	 OUT NUMBER
+) IS
+    v_rut	      VARCHAR2(12);
+    v_patente	      VARCHAR2(8);
+    v_metodo	      VARCHAR2(20);
+    v_terminal_bajada NUMBER;
+    v_terminal_nombre VARCHAR2(80);
+    v_fecha_viaje     DATE;
+    v_capacidad       NUMBER;
+    v_asignado	      NUMBER := 0;
+    v_pasajero	      NUMBER := 0;
+    v_asiento	      NUMBER := 0;
+    v_ocupados	      NUMBER := 0;
+    v_tarifa	      NUMBER;
+BEGIN
+    LOCK TABLE LEHZ_BOLETO IN EXCLUSIVE MODE;
+    LOCK TABLE LEHZ_PAGO IN EXCLUSIVE MODE;
+    LOCK TABLE LEHZ_PASAJE_BAJADA IN EXCLUSIVE MODE;
+
+    v_rut     := LEHZ_FN_NORMALIZAR_RUT(p_rut_pasajero, 'PERSONA');
+    v_patente := LEHZ_FN_NORMALIZAR_PATENTE(p_patente_bus);
+    v_metodo  := UPPER(TRIM(p_metodo_pago));
+    v_terminal_bajada := NULLIF(p_id_terminal_bajada, 0);
+
+    IF p_id_viaje IS NULL OR p_id_viaje <= 0 THEN
+	RAISE_APPLICATION_ERROR(-20104, 'Debe seleccionar un viaje valido.');
+    END IF;
+    IF p_numero_asiento IS NULL OR p_numero_asiento <= 0 THEN
+	RAISE_APPLICATION_ERROR(-20104, 'Debe seleccionar un numero de asiento valido.');
+    END IF;
+    IF v_metodo NOT IN ('EFECTIVO', 'TARJETA', 'TRANSFERENCIA') THEN
+	RAISE_APPLICATION_ERROR(-20104, 'Metodo de pago invalido: use EFECTIVO, TARJETA o TRANSFERENCIA.');
+    END IF;
+
+    SELECT COUNT(*) INTO v_pasajero FROM LEHZ_PASAJERO WHERE RUT_PASAJERO = v_rut;
+    IF v_pasajero = 0 THEN
+	RAISE_APPLICATION_ERROR(-20104, 'El pasajero no existe. Registrelo antes de vender el boleto.');
+    END IF;
+
+    SELECT FECHA_VIAJE INTO v_fecha_viaje FROM LEHZ_VIAJE WHERE ID_VIAJE = p_id_viaje;
+    IF TRUNC(v_fecha_viaje) < TRUNC(SYSDATE) THEN
+	RAISE_APPLICATION_ERROR(-20104, 'No se puede vender un boleto para un viaje cuya fecha ya paso.');
+    END IF;
+
+    SELECT COUNT(*) INTO v_asignado
+      FROM LEHZ_CONDUCE
+     WHERE ID_VIAJE = p_id_viaje
+       AND PATENTE_BUS = v_patente;
+    IF v_asignado = 0 THEN
+	RAISE_APPLICATION_ERROR(-20104, 'El bus no esta asignado al viaje seleccionado.');
+    END IF;
+
+    SELECT CAPACIDAD INTO v_capacidad FROM LEHZ_BUS WHERE PATENTE_BUS = v_patente;
+
+    SELECT COUNT(*) INTO v_asiento
+      FROM LEHZ_ASIENTO
+     WHERE PATENTE_BUS = v_patente
+       AND NUMERO_ASIENTO = p_numero_asiento;
+    IF v_asiento = 0 THEN
+	RAISE_APPLICATION_ERROR(-20104, 'El asiento ' || p_numero_asiento || ' no existe en el bus ' || v_patente || '.');
+    END IF;
+
+    SELECT COUNT(*) INTO v_ocupados
+      FROM LEHZ_BOLETO
+     WHERE ID_VIAJE = p_id_viaje
+       AND PATENTE_BUS = v_patente
+       AND ESTADO IN ('EMITIDO', 'USADO');
+    IF v_ocupados >= NVL(v_capacidad, 0) THEN
+	RAISE_APPLICATION_ERROR(-20104, 'No hay disponibilidad: el bus alcanzo su capacidad maxima (' || v_capacidad || ' asientos).');
+    END IF;
+
+    SELECT COUNT(*) INTO v_ocupados
+      FROM LEHZ_BOLETO
+     WHERE ID_VIAJE = p_id_viaje
+       AND PATENTE_BUS = v_patente
+       AND NUMERO_ASIENTO = p_numero_asiento
+       AND ESTADO IN ('EMITIDO', 'USADO');
+    IF v_ocupados > 0 THEN
+	RAISE_APPLICATION_ERROR(-20104, 'El asiento ' || p_numero_asiento || ' ya esta ocupado para este viaje y bus.');
+    END IF;
+
+    v_tarifa := LEHZ_FN_CALCULAR_TARIFA_BUS(p_id_viaje, v_patente, v_terminal_bajada);
+
+    SELECT LEHZ_SEQ_BOLETO.NEXTVAL INTO p_id_boleto_out FROM DUAL;
+
+    INSERT INTO LEHZ_BOLETO (
+	ID_BOLETO, FECHA_EMISION_BOLETO, HORA_EMISION_BOLETO, VALOR_BOLETO,
+	RUT_PASAJERO, ID_VIAJE, NUMERO_ASIENTO, PATENTE_BUS, ESTADO
+    ) VALUES (
+	p_id_boleto_out, SYSDATE, SYSTIMESTAMP, v_tarifa,
+	v_rut, p_id_viaje, p_numero_asiento, v_patente, 'EMITIDO'
+    );
+
+    INSERT INTO LEHZ_PAGO (
+	ID_PAGO, FECHA_PAGO, MONTO_PAGO, METODO_PAGO, ID_BOLETO, RUT_PASAJERO
+    ) VALUES (
+	LEHZ_SEQ_PAGO.NEXTVAL, SYSDATE, v_tarifa, v_metodo, p_id_boleto_out, v_rut
+    );
+
+    IF v_terminal_bajada IS NOT NULL THEN
+	SELECT NOMBRE INTO v_terminal_nombre
+	  FROM LEHZ_TERMINAL
+	 WHERE ID_TERMINAL = v_terminal_bajada;
+
+	INSERT INTO LEHZ_PASAJE_BAJADA (
+	    ID_BAJADA, ID_BOLETO, ID_TERMINAL_BAJADA, OBSERVACION, FECHA_REGISTRO
+	) VALUES (
+	    LEHZ_SEQ_PASAJE_BAJADA.NEXTVAL, p_id_boleto_out, v_terminal_bajada,
+	    'Bajada en ' || v_terminal_nombre, SYSDATE
+	);
+    END IF;
+
+    COMMIT;
+EXCEPTION
+    WHEN DUP_VAL_ON_INDEX THEN
+	ROLLBACK;
+	RAISE_APPLICATION_ERROR(-20105, 'El asiento ya fue vendido para este viaje. Seleccione otro asiento.');
+    WHEN OTHERS THEN
+	ROLLBACK;
+	IF SQLCODE = -2291 THEN
+	    RAISE_APPLICATION_ERROR(-20104, 'Alguno de los datos seleccionados (pasajero, viaje, bus, asiento o terminal) no existe.');
+	END IF;
+	RAISE;
+END LEHZ_PS_GES_VENDER_BOLETO;
+/
+CREATE OR REPLACE PROCEDURE "LEHZ_PS_IUD_ASIENTO" (
+    p_opcion	  IN VARCHAR2,
+    p_nro_asiento IN NUMBER,
+    p_patente	  IN VARCHAR2,
+    p_piso	  IN NUMBER DEFAULT 1,
+    p_ubicacion   IN VARCHAR2 DEFAULT NULL
+) IS
+    v_patente VARCHAR2(8);
+    v_piso    NUMBER := NVL(p_piso, 1);
+    v_count   NUMBER := 0;
+BEGIN
+    LOCK TABLE LEHZ_ASIENTO IN ROW EXCLUSIVE MODE;
+    v_patente := LEHZ_FN_NORMALIZAR_PATENTE(p_patente);
+
+    SELECT COUNT(*) INTO v_count FROM LEHZ_BUS WHERE PATENTE_BUS = v_patente;
+    IF v_count = 0 THEN
+	RAISE_APPLICATION_ERROR(-20050, 'El bus seleccionado no existe.');
+    END IF;
+
+    IF p_nro_asiento IS NULL OR p_nro_asiento <= 0 THEN
+	RAISE_APPLICATION_ERROR(-20050, 'El numero de asiento debe ser mayor que cero.');
+    END IF;
+
+    IF UPPER(TRIM(p_opcion)) = 'I' THEN
+	INSERT INTO LEHZ_ASIENTO (NUMERO_ASIENTO, PATENTE_BUS, PISO, UBICACION)
+	VALUES (p_nro_asiento, v_patente, v_piso, UPPER(TRIM(p_ubicacion)));
+
+    ELSIF UPPER(TRIM(p_opcion)) = 'U' THEN
+	UPDATE LEHZ_ASIENTO
+	   SET PISO = v_piso,
+	       UBICACION = UPPER(TRIM(p_ubicacion))
+	 WHERE NUMERO_ASIENTO = p_nro_asiento
+	   AND PATENTE_BUS = v_patente;
+
+	IF SQL%ROWCOUNT = 0 THEN
+	    RAISE_APPLICATION_ERROR(-20051, 'No se encontro el asiento a actualizar.');
+	END IF;
+
+    ELSIF UPPER(TRIM(p_opcion)) = 'D' THEN
+	DELETE FROM LEHZ_ASIENTO
+	 WHERE NUMERO_ASIENTO = p_nro_asiento
+	   AND PATENTE_BUS = v_patente;
+
+	IF SQL%ROWCOUNT = 0 THEN
+	    RAISE_APPLICATION_ERROR(-20052, 'No se encontro el asiento a eliminar.');
+	END IF;
+
+    ELSE
+	RAISE_APPLICATION_ERROR(-20050, 'Operacion invalida. Use I, U o D.');
+    END IF;
+
+    COMMIT;
+EXCEPTION
+    WHEN DUP_VAL_ON_INDEX THEN
+	ROLLBACK;
+	RAISE_APPLICATION_ERROR(-20050, 'Ya existe ese numero de asiento para este bus.');
+    WHEN OTHERS THEN
+	ROLLBACK;
+	IF SQLCODE = -2292 THEN
+	    RAISE_APPLICATION_ERROR(-20052, 'No se puede eliminar el asiento: tiene boletos asociados.');
+	END IF;
+	RAISE;
+END LEHZ_PS_IUD_ASIENTO;
+/
+CREATE OR REPLACE PROCEDURE "LEHZ_PS_IUD_BUS" (
+    p_opcion	    IN VARCHAR2,
+    p_patente	    IN VARCHAR2,
+    p_marca	    IN VARCHAR2 DEFAULT NULL,
+    p_modelo	    IN VARCHAR2 DEFAULT NULL,
+    p_anio	    IN NUMBER DEFAULT NULL,
+    p_capacidad     IN NUMBER DEFAULT NULL,
+    p_rut_empresa   IN VARCHAR2 DEFAULT NULL,
+    p_tipo_servicio IN VARCHAR2 DEFAULT 'NORMAL',
+    p_cantidad_pisos IN NUMBER DEFAULT 1,
+    p_tarifa_base   IN NUMBER DEFAULT 5000
+) IS
+    v_patente VARCHAR2(8);
+    v_rut     VARCHAR2(12);
+    v_count   NUMBER := 0;
+    v_tipo    VARCHAR2(20);
+BEGIN
+    LOCK TABLE LEHZ_BUS IN ROW EXCLUSIVE MODE;
+    v_patente := LEHZ_FN_NORMALIZAR_PATENTE(p_patente);
+    v_tipo    := UPPER(TRIM(NVL(p_tipo_servicio, 'NORMAL')));
+
+    IF UPPER(TRIM(p_opcion)) IN ('I', 'U') THEN
+	v_rut := LEHZ_FN_NORMALIZAR_RUT(p_rut_empresa, 'EMPRESA');
+	IF p_capacidad IS NULL OR p_capacidad <= 0 THEN
+	    RAISE_APPLICATION_ERROR(-20040, 'La capacidad del bus debe ser mayor que cero.');
+	END IF;
+	IF p_anio IS NULL THEN
+	    RAISE_APPLICATION_ERROR(-20040, 'El anio de fabricacion es obligatorio.');
+	END IF;
+	IF p_cantidad_pisos NOT IN (1, 2) THEN
+	    RAISE_APPLICATION_ERROR(-20040, 'La cantidad de pisos debe ser 1 o 2.');
+	END IF;
+	IF v_tipo NOT IN ('NORMAL', 'SALON CAMA', 'CAMA') THEN
+	    RAISE_APPLICATION_ERROR(-20040, 'Tipo de servicio invalido: use NORMAL, SALON CAMA o CAMA.');
+	END IF;
+	IF p_tarifa_base IS NULL OR p_tarifa_base <= 0 THEN
+	    RAISE_APPLICATION_ERROR(-20040, 'La tarifa base debe ser mayor que cero.');
+	END IF;
+
+	SELECT COUNT(*) INTO v_count FROM LEHZ_EMPRESA WHERE RUT_EMPRESA = v_rut;
+	IF v_count = 0 THEN
+	    RAISE_APPLICATION_ERROR(-20040, 'La empresa seleccionada no existe.');
+	END IF;
+    END IF;
+
+    IF UPPER(TRIM(p_opcion)) = 'I' THEN
+	INSERT INTO LEHZ_BUS (
+	    PATENTE_BUS, MARCA, MODELO, ANIO_FABRICACION, CAPACIDAD,
+	    TIPO_SERVICIO, CANTIDAD_PISOS, TARIFA_BASE, RUT_EMPRESA
+	) VALUES (
+	    v_patente, LEHZ_FN_NORMALIZAR_TEXTO(p_marca), LEHZ_FN_NORMALIZAR_TEXTO(p_modelo),
+	    p_anio, p_capacidad, v_tipo, p_cantidad_pisos, ROUND(p_tarifa_base), v_rut
+	);
+
+    ELSIF UPPER(TRIM(p_opcion)) = 'U' THEN
+	SELECT COUNT(*) INTO v_count
+	  FROM LEHZ_ASIENTO
+	 WHERE PATENTE_BUS = v_patente;
+	IF p_capacidad < v_count THEN
+	    RAISE_APPLICATION_ERROR(-20040, 'La capacidad no puede ser menor que los ' || v_count || ' asientos ya registrados.');
+	END IF;
+
+	UPDATE LEHZ_BUS
+	   SET MARCA = LEHZ_FN_NORMALIZAR_TEXTO(p_marca),
+	       MODELO = LEHZ_FN_NORMALIZAR_TEXTO(p_modelo),
+	       ANIO_FABRICACION = p_anio,
+	       CAPACIDAD = p_capacidad,
+	       TIPO_SERVICIO = v_tipo,
+	       CANTIDAD_PISOS = p_cantidad_pisos,
+	       TARIFA_BASE = ROUND(p_tarifa_base),
+	       RUT_EMPRESA = v_rut
+	 WHERE PATENTE_BUS = v_patente;
+
+	IF SQL%ROWCOUNT = 0 THEN
+	    RAISE_APPLICATION_ERROR(-20041, 'No se encontro el bus a actualizar.');
+	END IF;
+
+    ELSIF UPPER(TRIM(p_opcion)) = 'D' THEN
+	DELETE FROM LEHZ_BUS WHERE PATENTE_BUS = v_patente;
+	IF SQL%ROWCOUNT = 0 THEN
+	    RAISE_APPLICATION_ERROR(-20042, 'No se encontro el bus a eliminar.');
+	END IF;
+
+    ELSE
+	RAISE_APPLICATION_ERROR(-20040, 'Operacion invalida. Use I, U o D.');
+    END IF;
+
+    COMMIT;
+EXCEPTION
+    WHEN DUP_VAL_ON_INDEX THEN
+	ROLLBACK;
+	RAISE_APPLICATION_ERROR(-20040, 'Ya existe un bus registrado con esa patente.');
+    WHEN OTHERS THEN
+	ROLLBACK;
+	IF SQLCODE = -2292 THEN
+	    RAISE_APPLICATION_ERROR(-20042, 'No se puede eliminar el bus: tiene asientos, viajes o mantenciones asociadas.');
+	END IF;
+	RAISE;
+END LEHZ_PS_IUD_BUS;
+/
+CREATE OR REPLACE PROCEDURE "LEHZ_PS_IUD_COMUNA" (
+    p_opcion	    IN VARCHAR2,
+    p_id_comuna     IN OUT NUMBER,
+    p_nombre_comuna IN VARCHAR2 DEFAULT NULL
+) IS
+    v_nombre	 VARCHAR2(60);
+    v_id_region  NUMBER;
+    v_count	 NUMBER := 0;
+BEGIN
+    LOCK TABLE LEHZ_COMUNA IN ROW EXCLUSIVE MODE;
+    v_nombre := LEHZ_FN_NORMALIZAR_TEXTO(p_nombre_comuna);
+
+    IF UPPER(TRIM(p_opcion)) IN ('I', 'U') THEN
+	IF v_nombre IS NULL THEN
+	    RAISE_APPLICATION_ERROR(-20022, 'El nombre de la comuna es obligatorio.');
+	END IF;
+
+	BEGIN
+	    SELECT r.ID_REGION
+	      INTO v_id_region
+	      FROM LEHZ_VW_COMUNAS_CHILE_ALL c
+	      JOIN LEHZ_REGION r ON UPPER(r.NOMBRE_REGION) = UPPER(c.NOMBRE_REGION)
+	     WHERE UPPER(c.NOMBRE_COMUNA) = UPPER(v_nombre);
+	EXCEPTION
+	    WHEN NO_DATA_FOUND THEN
+		RAISE_APPLICATION_ERROR(-20022, 'La comuna seleccionada no existe en el catalogo de Chile o su region no esta cargada.');
+	END;
+    END IF;
+
+    IF UPPER(TRIM(p_opcion)) = 'I' THEN
+	p_id_comuna := LEHZ_SEQ_COMUNA.NEXTVAL;
+	INSERT INTO LEHZ_COMUNA (ID_COMUNA, NOMBRE_COMUNA, ID_REGION)
+	VALUES (p_id_comuna, v_nombre, v_id_region);
+
+    ELSIF UPPER(TRIM(p_opcion)) = 'U' THEN
+	IF p_id_comuna IS NULL OR p_id_comuna <= 0 THEN
+	    RAISE_APPLICATION_ERROR(-20022, 'Debe indicar la comuna a actualizar.');
+	END IF;
+	UPDATE LEHZ_COMUNA
+	   SET NOMBRE_COMUNA = v_nombre,
+	       ID_REGION = v_id_region
+	 WHERE ID_COMUNA = p_id_comuna;
+
+	IF SQL%ROWCOUNT = 0 THEN
+	    RAISE_APPLICATION_ERROR(-20022, 'No se encontro la comuna a actualizar.');
+	END IF;
+
+    ELSIF UPPER(TRIM(p_opcion)) = 'D' THEN
+	IF p_id_comuna IS NULL OR p_id_comuna <= 0 THEN
+	    RAISE_APPLICATION_ERROR(-20023, 'Debe indicar la comuna a eliminar.');
+	END IF;
+	DELETE FROM LEHZ_COMUNA WHERE ID_COMUNA = p_id_comuna;
+	IF SQL%ROWCOUNT = 0 THEN
+	    RAISE_APPLICATION_ERROR(-20023, 'No se encontro la comuna a eliminar.');
+	END IF;
+
+    ELSE
+	RAISE_APPLICATION_ERROR(-20022, 'Operacion invalida. Use I, U o D.');
+    END IF;
+
+    COMMIT;
+EXCEPTION
+    WHEN DUP_VAL_ON_INDEX THEN
+	ROLLBACK;
+	RAISE_APPLICATION_ERROR(-20022, 'Ya existe una comuna con ese identificador.');
+    WHEN OTHERS THEN
+	ROLLBACK;
+	IF SQLCODE = -2292 THEN
+	    RAISE_APPLICATION_ERROR(-20023, 'No se puede eliminar la comuna: tiene terminales asociados.');
+	END IF;
+	RAISE;
+END LEHZ_PS_IUD_COMUNA;
+/
+CREATE OR REPLACE PROCEDURE "LEHZ_PS_IUD_CONDUCTOR" (
+    p_opcion	   IN VARCHAR2,
+    p_rut	   IN VARCHAR2,
+    p_nombre	   IN VARCHAR2 DEFAULT NULL,
+    p_apellido1    IN VARCHAR2 DEFAULT NULL,
+    p_apellido2    IN VARCHAR2 DEFAULT NULL,
+    p_telefono	   IN VARCHAR2 DEFAULT NULL,
+    p_tipo_licencia IN VARCHAR2 DEFAULT NULL,
+    p_vencimiento  IN DATE DEFAULT NULL,
+    p_rut_empresa  IN VARCHAR2 DEFAULT NULL
+) IS
+    v_rut      VARCHAR2(12);
+    v_rut_emp  VARCHAR2(12);
+    v_telefono VARCHAR2(20);
+    v_count    NUMBER := 0;
+BEGIN
+    LOCK TABLE LEHZ_CONDUCTOR IN ROW EXCLUSIVE MODE;
+    v_rut      := LEHZ_FN_NORMALIZAR_RUT(p_rut, 'PERSONA');
+
+    IF UPPER(TRIM(p_opcion)) IN ('I', 'U') THEN
+	v_rut_emp  := LEHZ_FN_NORMALIZAR_RUT(p_rut_empresa, 'EMPRESA');
+	v_telefono := LEHZ_FN_VALIDAR_TEL_CL(p_telefono, 'PERSONA');
+	IF p_nombre IS NULL OR TRIM(p_nombre) = '' THEN
+	    RAISE_APPLICATION_ERROR(-20060, 'El nombre del conductor es obligatorio.');
+	END IF;
+	IF p_apellido1 IS NULL OR TRIM(p_apellido1) = '' THEN
+	    RAISE_APPLICATION_ERROR(-20060, 'El primer apellido del conductor es obligatorio.');
+	END IF;
+	IF p_vencimiento IS NULL THEN
+	    RAISE_APPLICATION_ERROR(-20060, 'La fecha de vencimiento de la licencia es obligatoria.');
+	END IF;
+	IF p_tipo_licencia IS NULL OR UPPER(TRIM(p_tipo_licencia)) NOT IN ('A1', 'A2', 'A3') THEN
+	    RAISE_APPLICATION_ERROR(-20060, 'Tipo de licencia invalido: debe ser A1, A2 o A3.');
+	END IF;
+	SELECT COUNT(*) INTO v_count FROM LEHZ_EMPRESA WHERE RUT_EMPRESA = v_rut_emp;
+	IF v_count = 0 THEN
+	    RAISE_APPLICATION_ERROR(-20060, 'La empresa seleccionada no existe.');
+	END IF;
+    END IF;
+
+    IF UPPER(TRIM(p_opcion)) = 'I' THEN
+	INSERT INTO LEHZ_CONDUCTOR (
+	    RUT_CONDUCTOR, NOMBRE_CONDUCTOR, APELLIDO1_CONDUCTOR, APELLIDO2_CONDUCTOR,
+	    TELEFONO, TIPO_LICENCIA, VENCIMIENTO_LICENCIA, RUT_EMPRESA
+	) VALUES (
+	    v_rut, LEHZ_FN_NORMALIZAR_TEXTO(p_nombre), LEHZ_FN_NORMALIZAR_TEXTO(p_apellido1),
+	    LEHZ_FN_NORMALIZAR_TEXTO(p_apellido2), v_telefono, UPPER(TRIM(p_tipo_licencia)),
+	    p_vencimiento, v_rut_emp
+	);
+
+    ELSIF UPPER(TRIM(p_opcion)) = 'U' THEN
+	UPDATE LEHZ_CONDUCTOR
+	   SET NOMBRE_CONDUCTOR = LEHZ_FN_NORMALIZAR_TEXTO(p_nombre),
+	       APELLIDO1_CONDUCTOR = LEHZ_FN_NORMALIZAR_TEXTO(p_apellido1),
+	       APELLIDO2_CONDUCTOR = LEHZ_FN_NORMALIZAR_TEXTO(p_apellido2),
+	       TELEFONO = v_telefono,
+	       TIPO_LICENCIA = UPPER(TRIM(p_tipo_licencia)),
+	       VENCIMIENTO_LICENCIA = p_vencimiento,
+	       RUT_EMPRESA = v_rut_emp
+	 WHERE RUT_CONDUCTOR = v_rut;
+
+	IF SQL%ROWCOUNT = 0 THEN
+	    RAISE_APPLICATION_ERROR(-20061, 'No se encontro el conductor a actualizar.');
+	END IF;
+
+    ELSIF UPPER(TRIM(p_opcion)) = 'D' THEN
+	DELETE FROM LEHZ_CONDUCTOR WHERE RUT_CONDUCTOR = v_rut;
+	IF SQL%ROWCOUNT = 0 THEN
+	    RAISE_APPLICATION_ERROR(-20062, 'No se encontro el conductor a eliminar.');
+	END IF;
+
+    ELSE
+	RAISE_APPLICATION_ERROR(-20060, 'Operacion invalida. Use I, U o D.');
+    END IF;
+
+    COMMIT;
+EXCEPTION
+    WHEN DUP_VAL_ON_INDEX THEN
+	ROLLBACK;
+	RAISE_APPLICATION_ERROR(-20060, 'Ya existe un conductor registrado con ese RUT.');
+    WHEN OTHERS THEN
+	ROLLBACK;
+	IF SQLCODE = -2292 THEN
+	    RAISE_APPLICATION_ERROR(-20062, 'No se puede eliminar el conductor: tiene viajes asignados.');
+	END IF;
+	RAISE;
+END LEHZ_PS_IUD_CONDUCTOR;
+/
+CREATE OR REPLACE PROCEDURE "LEHZ_PS_IUD_EMPRESA" (
+    p_opcion	   IN VARCHAR2,
+    p_rut_empresa  IN VARCHAR2,
+    p_razon_social IN VARCHAR2 DEFAULT NULL,
+    p_telefono	   IN VARCHAR2 DEFAULT NULL,
+    p_correo	   IN VARCHAR2 DEFAULT NULL
+) IS
+    v_rut      VARCHAR2(12);
+    v_telefono VARCHAR2(20);
+BEGIN
+    LOCK TABLE LEHZ_EMPRESA IN ROW EXCLUSIVE MODE;
+    v_rut      := LEHZ_FN_NORMALIZAR_RUT(p_rut_empresa, 'EMPRESA');
+
+    IF UPPER(TRIM(p_opcion)) IN ('I', 'U') THEN
+	v_telefono := LEHZ_FN_VALIDAR_TEL_CL(p_telefono, 'EMPRESA');
+    END IF;
+
+    IF UPPER(TRIM(p_opcion)) IN ('I', 'U') THEN
+	IF p_razon_social IS NULL OR TRIM(p_razon_social) = '' THEN
+	    RAISE_APPLICATION_ERROR(-20030, 'La razon social de la empresa es obligatoria.');
+	END IF;
+	IF p_correo IS NOT NULL
+	   AND NOT REGEXP_LIKE(LOWER(TRIM(p_correo)), '^[^@]+@[^@]+\.[^@]{2,}$') THEN
+	    RAISE_APPLICATION_ERROR(-20030, 'El correo electronico de la empresa no tiene un formato valido.');
+	END IF;
+    END IF;
+
+    IF UPPER(TRIM(p_opcion)) = 'I' THEN
+	INSERT INTO LEHZ_EMPRESA (RUT_EMPRESA, RAZON_SOCIAL, TELEFONO_EMPRESA, CORREO_ELECTRONICO_EMPRESA)
+	VALUES (v_rut, LEHZ_FN_NORMALIZAR_TEXTO(p_razon_social), v_telefono, LOWER(TRIM(p_correo)));
+
+    ELSIF UPPER(TRIM(p_opcion)) = 'U' THEN
+	IF p_razon_social IS NULL OR TRIM(p_razon_social) = '' THEN
+	    RAISE_APPLICATION_ERROR(-20030, 'La razon social de la empresa es obligatoria.');
+	END IF;
+	UPDATE LEHZ_EMPRESA
+	   SET RAZON_SOCIAL = LEHZ_FN_NORMALIZAR_TEXTO(p_razon_social),
+	       TELEFONO_EMPRESA = v_telefono,
+	       CORREO_ELECTRONICO_EMPRESA = LOWER(TRIM(p_correo))
+	 WHERE RUT_EMPRESA = v_rut;
+
+	IF SQL%ROWCOUNT = 0 THEN
+	    RAISE_APPLICATION_ERROR(-20031, 'No se encontro la empresa a actualizar.');
+	END IF;
+
+    ELSIF UPPER(TRIM(p_opcion)) = 'D' THEN
+	DELETE FROM LEHZ_EMPRESA WHERE RUT_EMPRESA = v_rut;
+	IF SQL%ROWCOUNT = 0 THEN
+	    RAISE_APPLICATION_ERROR(-20032, 'No se encontro la empresa a eliminar.');
+	END IF;
+
+    ELSE
+	RAISE_APPLICATION_ERROR(-20030, 'Operacion invalida. Use I, U o D.');
+    END IF;
+
+    COMMIT;
+EXCEPTION
+    WHEN DUP_VAL_ON_INDEX THEN
+	ROLLBACK;
+	RAISE_APPLICATION_ERROR(-20030, 'Ya existe una empresa registrada con ese RUT.');
+    WHEN OTHERS THEN
+	ROLLBACK;
+	IF SQLCODE = -2292 THEN
+	    RAISE_APPLICATION_ERROR(-20032, 'No se puede eliminar la empresa: tiene buses, conductores, mecanicos o terminales asociados.');
+	END IF;
+	RAISE;
+END LEHZ_PS_IUD_EMPRESA;
+/
+CREATE OR REPLACE PROCEDURE "LEHZ_PS_IUD_HORARIO" (
+    p_opcion	   IN VARCHAR2,
+    p_id_horario   IN OUT NUMBER,
+    p_horario_val  IN NUMBER DEFAULT NULL,
+    p_hora_salida  IN TIMESTAMP DEFAULT NULL,
+    p_hora_llegada IN TIMESTAMP DEFAULT NULL
+) IS
+    v_llegada TIMESTAMP := p_hora_llegada;
+BEGIN
+    LOCK TABLE LEHZ_HORARIO IN ROW EXCLUSIVE MODE;
+
+    IF UPPER(TRIM(p_opcion)) IN ('I', 'U') THEN
+	IF p_horario_val IS NULL OR p_horario_val <= 0 THEN
+	    RAISE_APPLICATION_ERROR(-20090, 'El codigo de horario debe ser mayor que cero.');
+	END IF;
+	IF p_hora_salida IS NULL OR p_hora_llegada IS NULL THEN
+	    RAISE_APPLICATION_ERROR(-20090, 'Debe indicar la hora de salida y la hora de llegada.');
+	END IF;
+	-- Si la llegada es menor o igual a la salida, se asume que llega al dia siguiente.
+	IF v_llegada <= p_hora_salida THEN
+	    v_llegada := v_llegada + INTERVAL '1' DAY;
+	END IF;
+    END IF;
+
+    IF UPPER(TRIM(p_opcion)) = 'I' THEN
+	p_id_horario := LEHZ_SEQ_HORARIO.NEXTVAL;
+	INSERT INTO LEHZ_HORARIO (ID_HORARIO, HORARIO, HORA_SALIDA, HORA_LLEGADA)
+	VALUES (p_id_horario, p_horario_val, p_hora_salida, v_llegada);
+
+    ELSIF UPPER(TRIM(p_opcion)) = 'U' THEN
+	IF p_id_horario IS NULL OR p_id_horario <= 0 THEN
+	    RAISE_APPLICATION_ERROR(-20090, 'Debe indicar el horario a actualizar.');
+	END IF;
+	UPDATE LEHZ_HORARIO
+	   SET HORARIO = p_horario_val,
+	       HORA_SALIDA = p_hora_salida,
+	       HORA_LLEGADA = v_llegada
+	 WHERE ID_HORARIO = p_id_horario;
+
+	IF SQL%ROWCOUNT = 0 THEN
+	    RAISE_APPLICATION_ERROR(-20091, 'No se encontro el horario a actualizar.');
+	END IF;
+
+    ELSIF UPPER(TRIM(p_opcion)) = 'D' THEN
+	IF p_id_horario IS NULL OR p_id_horario <= 0 THEN
+	    RAISE_APPLICATION_ERROR(-20092, 'Debe indicar el horario a eliminar.');
+	END IF;
+	DELETE FROM LEHZ_HORARIO WHERE ID_HORARIO = p_id_horario;
+	IF SQL%ROWCOUNT = 0 THEN
+	    RAISE_APPLICATION_ERROR(-20092, 'No se encontro el horario a eliminar.');
+	END IF;
+
+    ELSE
+	RAISE_APPLICATION_ERROR(-20090, 'Operacion invalida. Use I, U o D.');
+    END IF;
+
+    COMMIT;
+EXCEPTION
+    WHEN DUP_VAL_ON_INDEX THEN
+	ROLLBACK;
+	RAISE_APPLICATION_ERROR(-20090, 'Ya existe un horario con ese identificador.');
+    WHEN OTHERS THEN
+	ROLLBACK;
+	IF SQLCODE = -2292 THEN
+	    RAISE_APPLICATION_ERROR(-20092, 'No se puede eliminar el horario: tiene viajes asociados.');
+	END IF;
+	RAISE;
+END LEHZ_PS_IUD_HORARIO;
+/
+CREATE OR REPLACE PROCEDURE "LEHZ_PS_IUD_MECANICO" (
+    p_opcion	   IN VARCHAR2,
+    p_rut	   IN VARCHAR2,
+    p_nombre	   IN VARCHAR2 DEFAULT NULL,
+    p_apellido1    IN VARCHAR2 DEFAULT NULL,
+    p_apellido2    IN VARCHAR2 DEFAULT NULL,
+    p_telefono	   IN VARCHAR2 DEFAULT NULL,
+    p_especialidad IN VARCHAR2 DEFAULT NULL,
+    p_rut_empresa  IN VARCHAR2 DEFAULT NULL
+) IS
+    v_rut      VARCHAR2(12);
+    v_rut_emp  VARCHAR2(12);
+    v_telefono VARCHAR2(20);
+    v_count    NUMBER := 0;
+BEGIN
+    LOCK TABLE LEHZ_MECANICO IN ROW EXCLUSIVE MODE;
+    v_rut      := LEHZ_FN_NORMALIZAR_RUT(p_rut, 'PERSONA');
+
+    IF UPPER(TRIM(p_opcion)) IN ('I', 'U') THEN
+	v_rut_emp  := LEHZ_FN_NORMALIZAR_RUT(p_rut_empresa, 'EMPRESA');
+	v_telefono := LEHZ_FN_VALIDAR_TEL_CL(p_telefono, 'PERSONA');
+	IF p_nombre IS NULL OR TRIM(p_nombre) = '' THEN
+	    RAISE_APPLICATION_ERROR(-20070, 'El nombre del mecanico es obligatorio.');
+	END IF;
+	IF p_apellido1 IS NULL OR TRIM(p_apellido1) = '' THEN
+	    RAISE_APPLICATION_ERROR(-20070, 'El primer apellido del mecanico es obligatorio.');
+	END IF;
+	IF p_especialidad IS NULL OR TRIM(p_especialidad) = '' THEN
+	    RAISE_APPLICATION_ERROR(-20070, 'La especialidad del mecanico es obligatoria.');
+	END IF;
+	SELECT COUNT(*) INTO v_count FROM LEHZ_EMPRESA WHERE RUT_EMPRESA = v_rut_emp;
+	IF v_count = 0 THEN
+	    RAISE_APPLICATION_ERROR(-20070, 'La empresa seleccionada no existe.');
+	END IF;
+    END IF;
+
+    IF UPPER(TRIM(p_opcion)) = 'I' THEN
+	INSERT INTO LEHZ_MECANICO (
+	    RUT_MECANICO, NOMBRE_MECANICO, APELLIDO1_MECANICO, APELLIDO2_MECANICO,
+	    TELEFONO, ESPECIALIDAD, RUT_EMPRESA
+	) VALUES (
+	    v_rut, LEHZ_FN_NORMALIZAR_TEXTO(p_nombre), LEHZ_FN_NORMALIZAR_TEXTO(p_apellido1),
+	    LEHZ_FN_NORMALIZAR_TEXTO(p_apellido2), v_telefono,
+	    LEHZ_FN_NORMALIZAR_TEXTO(p_especialidad), v_rut_emp
+	);
+
+    ELSIF UPPER(TRIM(p_opcion)) = 'U' THEN
+	UPDATE LEHZ_MECANICO
+	   SET NOMBRE_MECANICO = LEHZ_FN_NORMALIZAR_TEXTO(p_nombre),
+	       APELLIDO1_MECANICO = LEHZ_FN_NORMALIZAR_TEXTO(p_apellido1),
+	       APELLIDO2_MECANICO = LEHZ_FN_NORMALIZAR_TEXTO(p_apellido2),
+	       TELEFONO = v_telefono,
+	       ESPECIALIDAD = LEHZ_FN_NORMALIZAR_TEXTO(p_especialidad),
+	       RUT_EMPRESA = v_rut_emp
+	 WHERE RUT_MECANICO = v_rut;
+
+	IF SQL%ROWCOUNT = 0 THEN
+	    RAISE_APPLICATION_ERROR(-20071, 'No se encontro el mecanico a actualizar.');
+	END IF;
+
+    ELSIF UPPER(TRIM(p_opcion)) = 'D' THEN
+	DELETE FROM LEHZ_MECANICO WHERE RUT_MECANICO = v_rut;
+	IF SQL%ROWCOUNT = 0 THEN
+	    RAISE_APPLICATION_ERROR(-20072, 'No se encontro el mecanico a eliminar.');
+	END IF;
+
+    ELSE
+	RAISE_APPLICATION_ERROR(-20070, 'Operacion invalida. Use I, U o D.');
+    END IF;
+
+    COMMIT;
+EXCEPTION
+    WHEN DUP_VAL_ON_INDEX THEN
+	ROLLBACK;
+	RAISE_APPLICATION_ERROR(-20070, 'Ya existe un mecanico registrado con ese RUT.');
+    WHEN OTHERS THEN
+	ROLLBACK;
+	IF SQLCODE = -2292 THEN
+	    RAISE_APPLICATION_ERROR(-20072, 'No se puede eliminar el mecanico: tiene mantenciones registradas.');
+	END IF;
+	RAISE;
+END LEHZ_PS_IUD_MECANICO;
+/
+CREATE OR REPLACE PROCEDURE "LEHZ_PS_IUD_PASAJERO" (
+    p_opcion	  IN VARCHAR2,
+    p_rut	  IN VARCHAR2,
+    p_nombre	  IN VARCHAR2 DEFAULT NULL,
+    p_apellido1   IN VARCHAR2 DEFAULT NULL,
+    p_apellido2   IN VARCHAR2 DEFAULT NULL,
+    p_telefono	  IN VARCHAR2 DEFAULT NULL,
+    p_correo	  IN VARCHAR2 DEFAULT NULL
+) IS
+    v_rut      VARCHAR2(12);
+    v_telefono VARCHAR2(20);
+    v_correo   VARCHAR2(80);
+BEGIN
+    LOCK TABLE LEHZ_PASAJERO IN ROW EXCLUSIVE MODE;
+    v_rut      := LEHZ_FN_NORMALIZAR_RUT(p_rut, 'PERSONA');
+
+    IF UPPER(TRIM(p_opcion)) IN ('I', 'U') THEN
+	v_telefono := LEHZ_FN_VALIDAR_TEL_CL(p_telefono, 'PERSONA');
+	v_correo   := LOWER(TRIM(p_correo));
+	IF p_nombre IS NULL OR TRIM(p_nombre) = '' THEN
+	    RAISE_APPLICATION_ERROR(-20160, 'El nombre del pasajero es obligatorio.');
+	END IF;
+	IF p_apellido1 IS NULL OR TRIM(p_apellido1) = '' THEN
+	    RAISE_APPLICATION_ERROR(-20160, 'El primer apellido del pasajero es obligatorio.');
+	END IF;
+	IF v_correo IS NOT NULL
+	   AND NOT REGEXP_LIKE(v_correo, '^[^@]+@[^@]+\.[^@]{2,}$') THEN
+	    RAISE_APPLICATION_ERROR(-20160, 'El correo electronico del pasajero no tiene un formato valido (ej. usuario@dominio.cl).');
+	END IF;
+    END IF;
+
+    IF UPPER(TRIM(p_opcion)) = 'I' THEN
+	INSERT INTO LEHZ_PASAJERO (
+	    RUT_PASAJERO, NOMBRE_PASAJERO, APELLIDO1_PASAJERO, APELLIDO2_PASAJERO,
+	    TELEFONO, CORREO_ELECTRONICO_PASAJERO
+	) VALUES (
+	    v_rut, LEHZ_FN_NORMALIZAR_TEXTO(p_nombre), LEHZ_FN_NORMALIZAR_TEXTO(p_apellido1),
+	    LEHZ_FN_NORMALIZAR_TEXTO(p_apellido2), v_telefono, v_correo
+	);
+
+    ELSIF UPPER(TRIM(p_opcion)) = 'U' THEN
+	UPDATE LEHZ_PASAJERO
+	   SET NOMBRE_PASAJERO = LEHZ_FN_NORMALIZAR_TEXTO(p_nombre),
+	       APELLIDO1_PASAJERO = LEHZ_FN_NORMALIZAR_TEXTO(p_apellido1),
+	       APELLIDO2_PASAJERO = LEHZ_FN_NORMALIZAR_TEXTO(p_apellido2),
+	       TELEFONO = v_telefono,
+	       CORREO_ELECTRONICO_PASAJERO = v_correo
+	 WHERE RUT_PASAJERO = v_rut;
+
+	IF SQL%ROWCOUNT = 0 THEN
+	    RAISE_APPLICATION_ERROR(-20161, 'No se encontro el pasajero a actualizar.');
+	END IF;
+
+    ELSIF UPPER(TRIM(p_opcion)) = 'D' THEN
+	DELETE FROM LEHZ_PASAJERO WHERE RUT_PASAJERO = v_rut;
+	IF SQL%ROWCOUNT = 0 THEN
+	    RAISE_APPLICATION_ERROR(-20162, 'No se encontro el pasajero a eliminar.');
+	END IF;
+
+    ELSE
+	RAISE_APPLICATION_ERROR(-20160, 'Operacion invalida. Use I, U o D.');
+    END IF;
+
+    COMMIT;
+EXCEPTION
+    WHEN DUP_VAL_ON_INDEX THEN
+	ROLLBACK;
+	RAISE_APPLICATION_ERROR(-20160, 'Ya existe un pasajero registrado con ese RUT.');
+    WHEN OTHERS THEN
+	ROLLBACK;
+	IF SQLCODE = -2292 THEN
+	    RAISE_APPLICATION_ERROR(-20162, 'No se puede eliminar el pasajero: tiene boletos o pagos asociados.');
+	END IF;
+	RAISE;
+END LEHZ_PS_IUD_PASAJERO;
+/
+CREATE OR REPLACE PROCEDURE "LEHZ_PS_IUD_REGION" (
+    p_opcion	    IN VARCHAR2,
+    p_id_region     IN OUT NUMBER,
+    p_nombre_region IN VARCHAR2 DEFAULT NULL
+) IS
+    v_nombre VARCHAR2(60);
+BEGIN
+    LOCK TABLE LEHZ_REGION IN ROW EXCLUSIVE MODE;
+    v_nombre := LEHZ_FN_NORMALIZAR_TEXTO(p_nombre_region);
+
+    IF UPPER(TRIM(p_opcion)) = 'I' THEN
+	IF v_nombre IS NULL THEN
+	    RAISE_APPLICATION_ERROR(-20020, 'El nombre de la region es obligatorio.');
+	END IF;
+	p_id_region := LEHZ_SEQ_REGION.NEXTVAL;
+	INSERT INTO LEHZ_REGION (ID_REGION, NOMBRE_REGION)
+	VALUES (p_id_region, v_nombre);
+
+    ELSIF UPPER(TRIM(p_opcion)) = 'U' THEN
+	IF p_id_region IS NULL OR p_id_region <= 0 THEN
+	    RAISE_APPLICATION_ERROR(-20020, 'Debe indicar la region a actualizar.');
+	END IF;
+	IF v_nombre IS NULL THEN
+	    RAISE_APPLICATION_ERROR(-20020, 'El nombre de la region es obligatorio.');
+	END IF;
+	UPDATE LEHZ_REGION
+	   SET NOMBRE_REGION = v_nombre
+	 WHERE ID_REGION = p_id_region;
+
+	IF SQL%ROWCOUNT = 0 THEN
+	    RAISE_APPLICATION_ERROR(-20020, 'No se encontro la region a actualizar.');
+	END IF;
+
+    ELSIF UPPER(TRIM(p_opcion)) = 'D' THEN
+	IF p_id_region IS NULL OR p_id_region <= 0 THEN
+	    RAISE_APPLICATION_ERROR(-20021, 'Debe indicar la region a eliminar.');
+	END IF;
+	DELETE FROM LEHZ_REGION
+	 WHERE ID_REGION = p_id_region;
+
+	IF SQL%ROWCOUNT = 0 THEN
+	    RAISE_APPLICATION_ERROR(-20021, 'No se encontro la region a eliminar.');
+	END IF;
+
+    ELSE
+	RAISE_APPLICATION_ERROR(-20020, 'Operacion invalida. Use I, U o D.');
+    END IF;
+
+    COMMIT;
+EXCEPTION
+    WHEN DUP_VAL_ON_INDEX THEN
+	ROLLBACK;
+	RAISE_APPLICATION_ERROR(-20020, 'Ya existe una region con ese identificador.');
+    WHEN OTHERS THEN
+	ROLLBACK;
+	IF SQLCODE = -2292 THEN
+	    RAISE_APPLICATION_ERROR(-20021, 'No se puede eliminar la region: tiene comunas asociadas.');
+	END IF;
+	RAISE;
+END LEHZ_PS_IUD_REGION;
+/
+CREATE OR REPLACE PROCEDURE "LEHZ_PS_IUD_RUTA" (
+    p_opcion		  IN VARCHAR2,
+    p_id_ruta		  IN OUT NUMBER,
+    p_nombre_ruta	  IN VARCHAR2 DEFAULT NULL,
+    p_id_terminal_origen  IN NUMBER DEFAULT NULL,
+    p_id_terminal_destino IN NUMBER DEFAULT NULL,
+    p_horario		  IN TIMESTAMP DEFAULT NULL,
+    p_distancia 	  IN NUMBER DEFAULT NULL,
+    p_horas_est 	  IN NUMBER DEFAULT NULL,
+    p_minutos_est	  IN NUMBER DEFAULT NULL
+) IS
+    v_nombre VARCHAR2(120);
+    v_count  NUMBER := 0;
+BEGIN
+    LOCK TABLE LEHZ_RUTA IN ROW EXCLUSIVE MODE;
+    v_nombre := LEHZ_FN_NORMALIZAR_TEXTO(p_nombre_ruta);
+
+    IF UPPER(TRIM(p_opcion)) IN ('I', 'U') THEN
+	IF v_nombre IS NULL THEN
+	    RAISE_APPLICATION_ERROR(-20080, 'El nombre de la ruta es obligatorio.');
+	END IF;
+	IF p_id_terminal_origen IS NULL OR p_id_terminal_destino IS NULL THEN
+	    RAISE_APPLICATION_ERROR(-20080, 'Debe indicar el terminal de origen y el de destino.');
+	END IF;
+	IF p_id_terminal_origen = p_id_terminal_destino THEN
+	    RAISE_APPLICATION_ERROR(-20080, 'El terminal de origen y destino deben ser diferentes.');
+	END IF;
+	IF p_distancia IS NULL OR p_distancia <= 0 THEN
+	    RAISE_APPLICATION_ERROR(-20080, 'La distancia de la ruta debe ser mayor que cero.');
+	END IF;
+	IF p_horas_est IS NULL OR p_horas_est < 0 THEN
+	    RAISE_APPLICATION_ERROR(-20080, 'Las horas estimadas deben ser mayores o iguales a cero.');
+	END IF;
+	IF p_minutos_est IS NULL OR p_minutos_est < 0 OR p_minutos_est >= 60 THEN
+	    RAISE_APPLICATION_ERROR(-20080, 'Los minutos estimados deben estar entre 0 y 59.');
+	END IF;
+
+	SELECT COUNT(*) INTO v_count FROM LEHZ_TERMINAL WHERE ID_TERMINAL = p_id_terminal_origen;
+	IF v_count = 0 THEN
+	    RAISE_APPLICATION_ERROR(-20080, 'El terminal de origen no existe.');
+	END IF;
+	SELECT COUNT(*) INTO v_count FROM LEHZ_TERMINAL WHERE ID_TERMINAL = p_id_terminal_destino;
+	IF v_count = 0 THEN
+	    RAISE_APPLICATION_ERROR(-20080, 'El terminal de destino no existe.');
+	END IF;
+    END IF;
+
+    IF UPPER(TRIM(p_opcion)) = 'I' THEN
+	p_id_ruta := LEHZ_SEQ_RUTA.NEXTVAL;
+	INSERT INTO LEHZ_RUTA (
+	    ID_RUTA, HORARIO, DISTANCIA, HORAS_ESTIMADAS, MINUTOS_ESTIMADOS,
+	    NOMBRE_RUTA, ID_TERMINAL_ORIGEN, ID_TERMINAL_DESTINO
+	) VALUES (
+	    p_id_ruta, p_horario, p_distancia, p_horas_est, p_minutos_est,
+	    v_nombre, p_id_terminal_origen, p_id_terminal_destino
+	);
+
+    ELSIF UPPER(TRIM(p_opcion)) = 'U' THEN
+	IF p_id_ruta IS NULL OR p_id_ruta <= 0 THEN
+	    RAISE_APPLICATION_ERROR(-20080, 'Debe indicar la ruta a actualizar.');
+	END IF;
+	UPDATE LEHZ_RUTA
+	   SET HORARIO = p_horario,
+	       DISTANCIA = p_distancia,
+	       HORAS_ESTIMADAS = p_horas_est,
+	       MINUTOS_ESTIMADOS = p_minutos_est,
+	       NOMBRE_RUTA = v_nombre,
+	       ID_TERMINAL_ORIGEN = p_id_terminal_origen,
+	       ID_TERMINAL_DESTINO = p_id_terminal_destino
+	 WHERE ID_RUTA = p_id_ruta;
+
+	IF SQL%ROWCOUNT = 0 THEN
+	    RAISE_APPLICATION_ERROR(-20081, 'No se encontro la ruta a actualizar.');
+	END IF;
+
+    ELSIF UPPER(TRIM(p_opcion)) = 'D' THEN
+	IF p_id_ruta IS NULL OR p_id_ruta <= 0 THEN
+	    RAISE_APPLICATION_ERROR(-20082, 'Debe indicar la ruta a eliminar.');
+	END IF;
+	DELETE FROM LEHZ_RUTA WHERE ID_RUTA = p_id_ruta;
+	IF SQL%ROWCOUNT = 0 THEN
+	    RAISE_APPLICATION_ERROR(-20082, 'No se encontro la ruta a eliminar.');
+	END IF;
+
+    ELSE
+	RAISE_APPLICATION_ERROR(-20080, 'Operacion invalida. Use I, U o D.');
+    END IF;
+
+    COMMIT;
+EXCEPTION
+    WHEN DUP_VAL_ON_INDEX THEN
+	ROLLBACK;
+	RAISE_APPLICATION_ERROR(-20080, 'Ya existe una ruta con ese identificador.');
+    WHEN OTHERS THEN
+	ROLLBACK;
+	IF SQLCODE = -2292 THEN
+	    RAISE_APPLICATION_ERROR(-20082, 'No se puede eliminar la ruta: tiene viajes asociados.');
+	END IF;
+	RAISE;
+END LEHZ_PS_IUD_RUTA;
+/
+CREATE OR REPLACE PROCEDURE "LEHZ_PS_IUD_RUTA_PARADA" (
+    p_opcion	      IN VARCHAR2,
+    p_id_ruta_parada  IN OUT NUMBER,
+    p_id_ruta	      IN NUMBER DEFAULT NULL,
+    p_id_terminal     IN NUMBER DEFAULT NULL,
+    p_orden	      IN NUMBER DEFAULT NULL,
+    p_minutos	      IN NUMBER DEFAULT 0,
+    p_permite_bajada  IN VARCHAR2 DEFAULT 'S'
+) IS
+    v_count NUMBER := 0;
+    v_perm  CHAR(1);
+BEGIN
+    LOCK TABLE LEHZ_RUTA_PARADA IN ROW EXCLUSIVE MODE;
+    v_perm := UPPER(TRIM(NVL(p_permite_bajada, 'S')));
+
+    IF UPPER(TRIM(p_opcion)) IN ('I', 'U') THEN
+	IF p_id_ruta IS NULL OR p_id_ruta <= 0 THEN
+	    RAISE_APPLICATION_ERROR(-20100, 'Debe indicar la ruta.');
+	END IF;
+	IF p_id_terminal IS NULL OR p_id_terminal <= 0 THEN
+	    RAISE_APPLICATION_ERROR(-20100, 'Debe indicar el terminal de la parada.');
+	END IF;
+	IF p_orden IS NULL OR p_orden <= 0 THEN
+	    RAISE_APPLICATION_ERROR(-20100, 'El orden de la parada debe ser mayor que cero.');
+	END IF;
+	IF p_minutos IS NULL OR p_minutos < 0 THEN
+	    RAISE_APPLICATION_ERROR(-20100, 'Los minutos desde el origen deben ser mayores o iguales a cero.');
+	END IF;
+	IF v_perm NOT IN ('S', 'N') THEN
+	    RAISE_APPLICATION_ERROR(-20100, 'El indicador de bajada debe ser S o N.');
+	END IF;
+
+	SELECT COUNT(*) INTO v_count FROM LEHZ_RUTA WHERE ID_RUTA = p_id_ruta;
+	IF v_count = 0 THEN
+	    RAISE_APPLICATION_ERROR(-20100, 'La ruta seleccionada no existe.');
+	END IF;
+	SELECT COUNT(*) INTO v_count FROM LEHZ_TERMINAL WHERE ID_TERMINAL = p_id_terminal;
+	IF v_count = 0 THEN
+	    RAISE_APPLICATION_ERROR(-20100, 'El terminal seleccionado no existe.');
+	END IF;
+
+	SELECT COUNT(*) INTO v_count
+	  FROM LEHZ_RUTA_PARADA
+	 WHERE ID_RUTA = p_id_ruta
+	   AND ORDEN_PARADA = p_orden
+	   AND ID_RUTA_PARADA <> NVL(p_id_ruta_parada, -1);
+	IF v_count > 0 THEN
+	    RAISE_APPLICATION_ERROR(-20100, 'Ya existe una parada con ese orden en la ruta.');
+	END IF;
+
+	SELECT COUNT(*) INTO v_count
+	  FROM LEHZ_RUTA_PARADA
+	 WHERE ID_RUTA = p_id_ruta
+	   AND ID_TERMINAL = p_id_terminal
+	   AND ID_RUTA_PARADA <> NVL(p_id_ruta_parada, -1);
+	IF v_count > 0 THEN
+	    RAISE_APPLICATION_ERROR(-20100, 'Ese terminal ya esta registrado como parada de la ruta.');
+	END IF;
+    END IF;
+
+    IF UPPER(TRIM(p_opcion)) = 'I' THEN
+	p_id_ruta_parada := LEHZ_SEQ_RUTA_PARADA.NEXTVAL;
+	INSERT INTO LEHZ_RUTA_PARADA (
+	    ID_RUTA_PARADA, ID_RUTA, ID_TERMINAL, ORDEN_PARADA,
+	    MINUTOS_DESDE_ORIG, PERMITE_BAJADA
+	) VALUES (
+	    p_id_ruta_parada, p_id_ruta, p_id_terminal, p_orden,
+	    p_minutos, v_perm
+	);
+
+    ELSIF UPPER(TRIM(p_opcion)) = 'U' THEN
+	IF p_id_ruta_parada IS NULL OR p_id_ruta_parada <= 0 THEN
+	    RAISE_APPLICATION_ERROR(-20100, 'Debe indicar la parada a actualizar.');
+	END IF;
+	UPDATE LEHZ_RUTA_PARADA
+	   SET ID_RUTA = p_id_ruta,
+	       ID_TERMINAL = p_id_terminal,
+	       ORDEN_PARADA = p_orden,
+	       MINUTOS_DESDE_ORIG = p_minutos,
+	       PERMITE_BAJADA = v_perm
+	 WHERE ID_RUTA_PARADA = p_id_ruta_parada;
+
+	IF SQL%ROWCOUNT = 0 THEN
+	    RAISE_APPLICATION_ERROR(-20101, 'No se encontro la parada a actualizar.');
+	END IF;
+
+    ELSIF UPPER(TRIM(p_opcion)) = 'D' THEN
+	IF p_id_ruta_parada IS NULL OR p_id_ruta_parada <= 0 THEN
+	    RAISE_APPLICATION_ERROR(-20102, 'Debe indicar la parada a eliminar.');
+	END IF;
+	DELETE FROM LEHZ_RUTA_PARADA WHERE ID_RUTA_PARADA = p_id_ruta_parada;
+	IF SQL%ROWCOUNT = 0 THEN
+	    RAISE_APPLICATION_ERROR(-20102, 'No se encontro la parada a eliminar.');
+	END IF;
+
+    ELSE
+	RAISE_APPLICATION_ERROR(-20100, 'Operacion invalida. Use I, U o D.');
+    END IF;
+
+    COMMIT;
+EXCEPTION
+    WHEN DUP_VAL_ON_INDEX THEN
+	ROLLBACK;
+	RAISE_APPLICATION_ERROR(-20100, 'Ya existe una parada con ese orden o terminal en la ruta.');
+    WHEN OTHERS THEN
+	ROLLBACK;
+	IF SQLCODE = -2292 THEN
+	    RAISE_APPLICATION_ERROR(-20102, 'No se puede eliminar la parada: tiene bajadas de pasajeros asociadas.');
+	END IF;
+	RAISE;
+END LEHZ_PS_IUD_RUTA_PARADA;
+/
+CREATE OR REPLACE PROCEDURE "LEHZ_PS_IUD_TERMINAL" (
+    p_opcion	  IN VARCHAR2,
+    p_id_terminal IN OUT NUMBER,
+    p_nombre	  IN VARCHAR2 DEFAULT NULL,
+    p_calle	  IN VARCHAR2 DEFAULT NULL,
+    p_numero	  IN NUMBER DEFAULT NULL,
+    p_id_comuna   IN NUMBER DEFAULT NULL
+) IS
+    v_nombre VARCHAR2(80);
+    v_calle  VARCHAR2(60);
+    v_count  NUMBER := 0;
+BEGIN
+    LOCK TABLE LEHZ_TERMINAL IN ROW EXCLUSIVE MODE;
+    v_nombre := LEHZ_FN_NORMALIZAR_TEXTO(p_nombre);
+    v_calle  := LEHZ_FN_NORMALIZAR_TEXTO(p_calle);
+
+    IF UPPER(TRIM(p_opcion)) IN ('I', 'U') THEN
+	IF v_nombre IS NULL THEN
+	    RAISE_APPLICATION_ERROR(-20024, 'El nombre del terminal es obligatorio.');
+	END IF;
+	IF v_calle IS NULL THEN
+	    RAISE_APPLICATION_ERROR(-20024, 'La calle del terminal es obligatoria.');
+	END IF;
+	IF p_numero IS NOT NULL AND p_numero <= 0 THEN
+	    RAISE_APPLICATION_ERROR(-20024, 'El numero de la direccion debe ser mayor que cero.');
+	END IF;
+	IF p_id_comuna IS NULL OR p_id_comuna <= 0 THEN
+	    RAISE_APPLICATION_ERROR(-20024, 'Debe seleccionar una comuna valida.');
+	END IF;
+	SELECT COUNT(*) INTO v_count FROM LEHZ_COMUNA WHERE ID_COMUNA = p_id_comuna;
+	IF v_count = 0 THEN
+	    RAISE_APPLICATION_ERROR(-20024, 'La comuna seleccionada no existe.');
+	END IF;
+    END IF;
+
+    IF UPPER(TRIM(p_opcion)) = 'I' THEN
+	p_id_terminal := LEHZ_SEQ_TERMINAL.NEXTVAL;
+	INSERT INTO LEHZ_TERMINAL (ID_TERMINAL, NOMBRE, CALLE, NUMERO, ID_COMUNA)
+	VALUES (p_id_terminal, v_nombre, v_calle, p_numero, p_id_comuna);
+
+    ELSIF UPPER(TRIM(p_opcion)) = 'U' THEN
+	IF p_id_terminal IS NULL OR p_id_terminal <= 0 THEN
+	    RAISE_APPLICATION_ERROR(-20024, 'Debe indicar el terminal a actualizar.');
+	END IF;
+	UPDATE LEHZ_TERMINAL
+	   SET NOMBRE = v_nombre,
+	       CALLE = v_calle,
+	       NUMERO = p_numero,
+	       ID_COMUNA = p_id_comuna
+	 WHERE ID_TERMINAL = p_id_terminal;
+
+	IF SQL%ROWCOUNT = 0 THEN
+	    RAISE_APPLICATION_ERROR(-20024, 'No se encontro el terminal a actualizar.');
+	END IF;
+
+    ELSIF UPPER(TRIM(p_opcion)) = 'D' THEN
+	IF p_id_terminal IS NULL OR p_id_terminal <= 0 THEN
+	    RAISE_APPLICATION_ERROR(-20025, 'Debe indicar el terminal a eliminar.');
+	END IF;
+	DELETE FROM LEHZ_TERMINAL WHERE ID_TERMINAL = p_id_terminal;
+	IF SQL%ROWCOUNT = 0 THEN
+	    RAISE_APPLICATION_ERROR(-20025, 'No se encontro el terminal a eliminar.');
+	END IF;
+
+    ELSE
+	RAISE_APPLICATION_ERROR(-20024, 'Operacion invalida. Use I, U o D.');
+    END IF;
+
+    COMMIT;
+EXCEPTION
+    WHEN DUP_VAL_ON_INDEX THEN
+	ROLLBACK;
+	RAISE_APPLICATION_ERROR(-20024, 'Ya existe un terminal con ese identificador.');
+    WHEN OTHERS THEN
+	ROLLBACK;
+	IF SQLCODE = -2292 THEN
+	    RAISE_APPLICATION_ERROR(-20025, 'No se puede eliminar el terminal: tiene rutas, asociaciones o bajadas asociadas.');
+	END IF;
+	RAISE;
+END LEHZ_PS_IUD_TERMINAL;
+/
+CREATE OR REPLACE PROCEDURE "LEHZ_PS_LISTAR_ASIENTOS" (
+    p_cursor OUT SYS_REFCURSOR
+) IS
+BEGIN
+    OPEN p_cursor FOR
+	SELECT a.NUMERO_ASIENTO, a.PATENTE_BUS, a.PISO, a.UBICACION,
+	       b.MARCA || ' ' || b.MODELO AS BUS_DETALLE, b.CAPACIDAD
+	FROM LEHZ_ASIENTO a
+	INNER JOIN LEHZ_BUS b ON a.PATENTE_BUS = b.PATENTE_BUS
+	ORDER BY a.PATENTE_BUS, a.NUMERO_ASIENTO ASC;
+END LEHZ_PS_LISTAR_ASIENTOS;
+/
+CREATE OR REPLACE PROCEDURE "LEHZ_PS_LISTAR_BOLETOS" (
+    p_cursor OUT SYS_REFCURSOR
+) IS
+BEGIN
+    OPEN p_cursor FOR
+	SELECT b.ID_BOLETO,
+	       TO_CHAR(b.FECHA_EMISION_BOLETO, 'DD/MM/YYYY') AS FECHA_EMISION,
+	       b.VALOR_BOLETO, b.ESTADO,
+	       b.RUT_PASAJERO,
+	       p.NOMBRE_PASAJERO || ' ' || p.APELLIDO1_PASAJERO AS PASAJERO,
+	       b.ID_VIAJE, TO_CHAR(v.FECHA_VIAJE, 'DD/MM/YYYY') AS FECHA_VIAJE,
+	       r.NOMBRE_RUTA, b.PATENTE_BUS, b.NUMERO_ASIENTO,
+	       pg.METODO_PAGO,
+	       tb.NOMBRE AS TERMINAL_BAJADA,
+	       b.FECHA_ANULACION, b.MOTIVO_ANULACION
+	FROM LEHZ_BOLETO b
+	INNER JOIN LEHZ_PASAJERO p ON p.RUT_PASAJERO = b.RUT_PASAJERO
+	INNER JOIN LEHZ_VIAJE v ON v.ID_VIAJE = b.ID_VIAJE
+	INNER JOIN LEHZ_RUTA r ON r.ID_RUTA = v.ID_RUTA
+	LEFT JOIN LEHZ_PAGO pg ON pg.ID_BOLETO = b.ID_BOLETO
+	LEFT JOIN LEHZ_PASAJE_BAJADA pb ON pb.ID_BOLETO = b.ID_BOLETO
+	LEFT JOIN LEHZ_TERMINAL tb ON tb.ID_TERMINAL = pb.ID_TERMINAL_BAJADA
+	ORDER BY b.ID_BOLETO DESC;
+END LEHZ_PS_LISTAR_BOLETOS;
+/
+CREATE OR REPLACE PROCEDURE "LEHZ_PS_LISTAR_BUSES" (
+    p_cursor OUT SYS_REFCURSOR
+) IS
+BEGIN
+    OPEN p_cursor FOR
+	SELECT b.PATENTE_BUS, b.MARCA, b.MODELO, b.ANIO_FABRICACION, b.CAPACIDAD,
+	       b.TIPO_SERVICIO, b.CANTIDAD_PISOS, b.TARIFA_BASE,
+	       b.RUT_EMPRESA, e.RAZON_SOCIAL AS NOMBRE_EMPRESA
+	FROM LEHZ_BUS b
+	INNER JOIN LEHZ_EMPRESA e ON b.RUT_EMPRESA = e.RUT_EMPRESA
+	ORDER BY b.PATENTE_BUS ASC;
+END LEHZ_PS_LISTAR_BUSES;
+/
+CREATE OR REPLACE PROCEDURE "LEHZ_PS_LISTAR_COMUNAS" (
+    p_cursor OUT SYS_REFCURSOR
+) IS
+BEGIN
+    OPEN p_cursor FOR
+	SELECT c.ID_COMUNA, c.NOMBRE_COMUNA, c.ID_REGION, r.NOMBRE_REGION
+	FROM LEHZ_COMUNA c
+	INNER JOIN LEHZ_REGION r ON c.ID_REGION = r.ID_REGION
+	ORDER BY r.NOMBRE_REGION ASC, c.NOMBRE_COMUNA ASC;
+END LEHZ_PS_LISTAR_COMUNAS;
+/
+CREATE OR REPLACE PROCEDURE "LEHZ_PS_LISTAR_COMUNAS_CHILE" (
+    p_cursor OUT SYS_REFCURSOR
+) IS
+BEGIN
+    OPEN p_cursor FOR
+	SELECT NOMBRE_COMUNA AS VALOR,
+	       NOMBRE_COMUNA || ' (' || NOMBRE_REGION || ')' AS ETIQUETA,
+	       NOMBRE_REGION
+	FROM LEHZ_VW_COMUNAS_CHILE
+	ORDER BY NOMBRE_REGION, NOMBRE_COMUNA;
+END LEHZ_PS_LISTAR_COMUNAS_CHILE;
+/
+CREATE OR REPLACE PROCEDURE "LEHZ_PS_LISTAR_CONDUCE" (
+    p_cursor OUT SYS_REFCURSOR
+) IS
+BEGIN
+    OPEN p_cursor FOR
+	SELECT c.RUT_CONDUCTOR,
+	       co.NOMBRE_CONDUCTOR || ' ' || co.APELLIDO1_CONDUCTOR AS CONDUCTOR,
+	       c.PATENTE_BUS, b.MARCA || ' ' || b.MODELO AS BUS,
+	       c.ID_VIAJE, TO_CHAR(v.FECHA_VIAJE, 'DD/MM/YYYY') AS FECHA_VIAJE,
+	       r.NOMBRE_RUTA,
+	       TO_CHAR(h.HORA_SALIDA, 'HH24:MI') AS HORA_SALIDA
+	FROM LEHZ_CONDUCE c
+	INNER JOIN LEHZ_CONDUCTOR co ON co.RUT_CONDUCTOR = c.RUT_CONDUCTOR
+	INNER JOIN LEHZ_BUS b ON b.PATENTE_BUS = c.PATENTE_BUS
+	INNER JOIN LEHZ_VIAJE v ON v.ID_VIAJE = c.ID_VIAJE
+	INNER JOIN LEHZ_RUTA r ON r.ID_RUTA = v.ID_RUTA
+	INNER JOIN LEHZ_HORARIO h ON h.ID_HORARIO = v.ID_HORARIO
+	ORDER BY v.FECHA_VIAJE DESC, h.HORA_SALIDA ASC;
+END LEHZ_PS_LISTAR_CONDUCE;
+/
+CREATE OR REPLACE PROCEDURE "LEHZ_PS_LISTAR_CONDUCTORES" (
+    p_cursor OUT SYS_REFCURSOR
+) IS
+BEGIN
+    OPEN p_cursor FOR
+	SELECT c.RUT_CONDUCTOR, c.NOMBRE_CONDUCTOR, c.APELLIDO1_CONDUCTOR,
+	       c.APELLIDO2_CONDUCTOR, c.TELEFONO, c.TIPO_LICENCIA,
+	       TO_CHAR(c.VENCIMIENTO_LICENCIA, 'YYYY-MM-DD') AS VENCIMIENTO_LICENCIA,
+	       TO_CHAR(c.VENCIMIENTO_LICENCIA, 'DD/MM/YYYY') AS VENCIMIENTO_TEXTO,
+	       c.RUT_EMPRESA,
+	       e.RAZON_SOCIAL AS NOMBRE_EMPRESA
+	FROM LEHZ_CONDUCTOR c
+	INNER JOIN LEHZ_EMPRESA e ON c.RUT_EMPRESA = e.RUT_EMPRESA
+	ORDER BY c.APELLIDO1_CONDUCTOR ASC, c.APELLIDO2_CONDUCTOR ASC;
+END LEHZ_PS_LISTAR_CONDUCTORES;
+/
+CREATE OR REPLACE PROCEDURE "LEHZ_PS_LISTAR_EMPRESAS" (
+    p_cursor OUT SYS_REFCURSOR
+) IS
+BEGIN
+    OPEN p_cursor FOR
+	SELECT RUT_EMPRESA, RAZON_SOCIAL, TELEFONO_EMPRESA, CORREO_ELECTRONICO_EMPRESA
+	FROM LEHZ_EMPRESA
+	ORDER BY RAZON_SOCIAL ASC;
+END LEHZ_PS_LISTAR_EMPRESAS;
+/
+CREATE OR REPLACE PROCEDURE "LEHZ_PS_LISTAR_HORARIOS" (
+    p_cursor OUT SYS_REFCURSOR
+) IS
+BEGIN
+    OPEN p_cursor FOR
+	SELECT ID_HORARIO, HORARIO,
+	       TO_CHAR(HORA_SALIDA, 'YYYY-MM-DD"T"HH24:MI') AS HORA_SALIDA,
+	       TO_CHAR(HORA_SALIDA, 'DD/MM/YYYY HH24:MI') AS HORA_SALIDA_TEXTO,
+	       TO_CHAR(HORA_LLEGADA, 'YYYY-MM-DD"T"HH24:MI') AS HORA_LLEGADA,
+	       TO_CHAR(HORA_LLEGADA, 'DD/MM/YYYY HH24:MI') AS HORA_LLEGADA_TEXTO,
+	       TO_CHAR(HORA_SALIDA, 'HH24:MI') || ' - ' || TO_CHAR(HORA_LLEGADA, 'HH24:MI') AS RANGO,
+	       CASE
+		   WHEN TO_NUMBER(TO_CHAR(HORA_SALIDA, 'HH24')) < 12 THEN 'MANANA'
+		   WHEN TO_NUMBER(TO_CHAR(HORA_SALIDA, 'HH24')) < 19 THEN 'TARDE'
+		   ELSE 'NOCHE'
+	       END AS JORNADA
+	FROM LEHZ_HORARIO
+	ORDER BY HORA_SALIDA ASC;
+END LEHZ_PS_LISTAR_HORARIOS;
+/
+CREATE OR REPLACE PROCEDURE "LEHZ_PS_LISTAR_MANTENCIONES" (
+    p_cursor OUT SYS_REFCURSOR
+) IS
+BEGIN
+    OPEN p_cursor FOR
+	SELECT m.ID_MANTENCION,
+	       TO_CHAR(m.FECHA_MANTENCION, 'DD/MM/YYYY') AS FECHA_MANTENCION,
+	       m.DESCRIPCION_MANTENCION, m.COSTO_MANTENCION,
+	       m.RUT_MECANICO,
+	       me.NOMBRE_MECANICO || ' ' || me.APELLIDO1_MECANICO AS MECANICO,
+	       m.PATENTE_BUS,
+	       b.MARCA || ' ' || b.MODELO AS BUS,
+	       b.RUT_EMPRESA, e.RAZON_SOCIAL
+	FROM LEHZ_MANTENCION m
+	INNER JOIN LEHZ_MECANICO me ON me.RUT_MECANICO = m.RUT_MECANICO
+	INNER JOIN LEHZ_BUS b ON b.PATENTE_BUS = m.PATENTE_BUS
+	INNER JOIN LEHZ_EMPRESA e ON e.RUT_EMPRESA = b.RUT_EMPRESA
+	ORDER BY m.FECHA_MANTENCION DESC, m.ID_MANTENCION DESC;
+END LEHZ_PS_LISTAR_MANTENCIONES;
+/
+CREATE OR REPLACE PROCEDURE "LEHZ_PS_LISTAR_MECANICOS" (
+    p_cursor OUT SYS_REFCURSOR
+) IS
+BEGIN
+    OPEN p_cursor FOR
+	SELECT m.RUT_MECANICO, m.NOMBRE_MECANICO, m.APELLIDO1_MECANICO,
+	       m.APELLIDO2_MECANICO, m.TELEFONO, m.ESPECIALIDAD,
+	       m.RUT_EMPRESA, e.RAZON_SOCIAL AS NOMBRE_EMPRESA
+	FROM LEHZ_MECANICO m
+	INNER JOIN LEHZ_EMPRESA e ON m.RUT_EMPRESA = e.RUT_EMPRESA
+	ORDER BY m.APELLIDO1_MECANICO ASC, m.APELLIDO2_MECANICO ASC;
+END LEHZ_PS_LISTAR_MECANICOS;
+/
+CREATE OR REPLACE PROCEDURE "LEHZ_PS_LISTAR_MENU" (
+    p_rol    IN  VARCHAR2,
+    p_cursor OUT SYS_REFCURSOR
+) IS
+BEGIN
+    OPEN p_cursor FOR
+	SELECT CODIGO, ETIQUETA, GRUPO, ORDEN
+	  FROM LEHZ_VW_MENU_ROL
+	 WHERE NOMBRE_ROL = UPPER(TRIM(p_rol))
+	 ORDER BY ORDEN ASC;
+END LEHZ_PS_LISTAR_MENU;
+/
+CREATE OR REPLACE PROCEDURE "LEHZ_PS_LISTAR_PARADAS_DE_RUTA" (
+    p_id_ruta IN NUMBER,
+    p_cursor  OUT SYS_REFCURSOR
+) IS
+BEGIN
+    OPEN p_cursor FOR
+	SELECT rp.ID_RUTA_PARADA, rp.ID_RUTA, r.NOMBRE_RUTA,
+	       rp.ID_TERMINAL, t.NOMBRE AS TERMINAL,
+	       c.NOMBRE_COMUNA, rp.ORDEN_PARADA,
+	       rp.MINUTOS_DESDE_ORIG, rp.PERMITE_BAJADA
+	FROM LEHZ_RUTA_PARADA rp
+	INNER JOIN LEHZ_RUTA r ON rp.ID_RUTA = r.ID_RUTA
+	INNER JOIN LEHZ_TERMINAL t ON rp.ID_TERMINAL = t.ID_TERMINAL
+	INNER JOIN LEHZ_COMUNA c ON t.ID_COMUNA = c.ID_COMUNA
+	WHERE rp.ID_RUTA = p_id_ruta
+	ORDER BY rp.ORDEN_PARADA ASC;
+END LEHZ_PS_LISTAR_PARADAS_DE_RUTA;
+/
+CREATE OR REPLACE PROCEDURE "LEHZ_PS_LISTAR_PASAJEROS" (
+    p_cursor OUT SYS_REFCURSOR
+) IS
+BEGIN
+    OPEN p_cursor FOR
+	SELECT RUT_PASAJERO, NOMBRE_PASAJERO, APELLIDO1_PASAJERO, APELLIDO2_PASAJERO,
+	       NOMBRE_PASAJERO || ' ' || APELLIDO1_PASAJERO AS NOMBRE_COMPLETO,
+	       TELEFONO, CORREO_ELECTRONICO_PASAJERO
+	FROM LEHZ_PASAJERO
+	ORDER BY APELLIDO1_PASAJERO ASC, APELLIDO2_PASAJERO ASC, NOMBRE_PASAJERO ASC;
+END LEHZ_PS_LISTAR_PASAJEROS;
+/
+CREATE OR REPLACE PROCEDURE "LEHZ_PS_LISTAR_REGIONES" (
+    p_cursor OUT SYS_REFCURSOR
+) IS
+BEGIN
+    OPEN p_cursor FOR
+	SELECT ID_REGION, NOMBRE_REGION
+	FROM LEHZ_REGION
+	ORDER BY NOMBRE_REGION ASC;
+END LEHZ_PS_LISTAR_REGIONES;
+/
+CREATE OR REPLACE PROCEDURE "LEHZ_PS_LISTAR_REGIONES_CHILE" (
+    p_cursor OUT SYS_REFCURSOR
+) IS
+BEGIN
+    OPEN p_cursor FOR
+	SELECT NOMBRE_REGION AS VALOR, NOMBRE_REGION AS ETIQUETA
+	FROM LEHZ_VW_REGIONES_CHILE
+	ORDER BY ORDEN;
+END LEHZ_PS_LISTAR_REGIONES_CHILE;
+/
+CREATE OR REPLACE PROCEDURE "LEHZ_PS_LISTAR_ROLES" (
+    p_cursor OUT SYS_REFCURSOR
+) IS
+BEGIN
+    OPEN p_cursor FOR
+	SELECT ID_ROL, NOMBRE_ROL, DESCRIPCION_ROL
+	FROM LEHZ_ROL
+	ORDER BY ID_ROL ASC;
+END LEHZ_PS_LISTAR_ROLES;
+/
+CREATE OR REPLACE PROCEDURE "LEHZ_PS_LISTAR_RUTAS" (
+    p_cursor OUT SYS_REFCURSOR
+) IS
+BEGIN
+    OPEN p_cursor FOR
+	SELECT r.ID_RUTA, r.NOMBRE_RUTA,
+	       TO_CHAR(r.HORARIO, 'YYYY-MM-DD"T"HH24:MI') AS HORARIO,
+	       TO_CHAR(r.HORARIO, 'DD/MM/YYYY HH24:MI') AS HORARIO_TEXTO,
+	       r.DISTANCIA,
+	       r.HORAS_ESTIMADAS, r.MINUTOS_ESTIMADOS,
+	       r.ID_TERMINAL_ORIGEN, o.NOMBRE AS TERMINAL_ORIGEN,
+	       r.ID_TERMINAL_DESTINO, d.NOMBRE AS TERMINAL_DESTINO,
+	       (SELECT COUNT(*) FROM LEHZ_RUTA_PARADA rp WHERE rp.ID_RUTA = r.ID_RUTA) AS TOTAL_PARADAS
+	FROM LEHZ_RUTA r
+	INNER JOIN LEHZ_TERMINAL o ON r.ID_TERMINAL_ORIGEN = o.ID_TERMINAL
+	INNER JOIN LEHZ_TERMINAL d ON r.ID_TERMINAL_DESTINO = d.ID_TERMINAL
+	ORDER BY r.NOMBRE_RUTA ASC;
+END LEHZ_PS_LISTAR_RUTAS;
+/
+CREATE OR REPLACE PROCEDURE "LEHZ_PS_LISTAR_RUTA_PARADAS" (
+    p_cursor OUT SYS_REFCURSOR
+) IS
+BEGIN
+    OPEN p_cursor FOR
+	SELECT rp.ID_RUTA_PARADA, rp.ID_RUTA, r.NOMBRE_RUTA,
+	       rp.ID_TERMINAL, t.NOMBRE AS TERMINAL,
+	       c.NOMBRE_COMUNA, rp.ORDEN_PARADA,
+	       rp.MINUTOS_DESDE_ORIG, rp.PERMITE_BAJADA
+	FROM LEHZ_RUTA_PARADA rp
+	INNER JOIN LEHZ_RUTA r ON rp.ID_RUTA = r.ID_RUTA
+	INNER JOIN LEHZ_TERMINAL t ON rp.ID_TERMINAL = t.ID_TERMINAL
+	INNER JOIN LEHZ_COMUNA c ON t.ID_COMUNA = c.ID_COMUNA
+	ORDER BY r.NOMBRE_RUTA ASC, rp.ORDEN_PARADA ASC;
+END LEHZ_PS_LISTAR_RUTA_PARADAS;
+/
+CREATE OR REPLACE PROCEDURE "LEHZ_PS_LISTAR_TERMINALES" (
+    p_cursor OUT SYS_REFCURSOR
+) IS
+BEGIN
+    OPEN p_cursor FOR
+	SELECT t.ID_TERMINAL, t.NOMBRE, t.CALLE, t.NUMERO, t.ID_COMUNA,
+	       c.NOMBRE_COMUNA, r.NOMBRE_REGION
+	FROM LEHZ_TERMINAL t
+	INNER JOIN LEHZ_COMUNA c ON t.ID_COMUNA = c.ID_COMUNA
+	INNER JOIN LEHZ_REGION r ON c.ID_REGION = r.ID_REGION
+	ORDER BY r.NOMBRE_REGION ASC, c.NOMBRE_COMUNA ASC, t.NOMBRE ASC;
+END LEHZ_PS_LISTAR_TERMINALES;
+/
+CREATE OR REPLACE PROCEDURE "LEHZ_PS_LISTAR_USUARIOS" (
+    p_cursor OUT SYS_REFCURSOR
+) IS
+BEGIN
+    OPEN p_cursor FOR
+	SELECT u.ID_USUARIO, u.USERNAME, u.NOMBRE_COMPLETO, u.EMAIL,
+	       u.ESTADO, r.NOMBRE_ROL, u.FECHA_CREACION
+	  FROM LEHZ_USUARIO u
+	  INNER JOIN LEHZ_ROL r ON u.ID_ROL = r.ID_ROL
+	 ORDER BY u.ID_USUARIO ASC;
+END LEHZ_PS_LISTAR_USUARIOS;
+/
+CREATE OR REPLACE PROCEDURE "LEHZ_PS_LISTAR_UTILIZAN" (
+    p_cursor OUT SYS_REFCURSOR
+) IS
+BEGIN
+    OPEN p_cursor FOR
+	SELECT u.ID_TERMINAL, t.NOMBRE AS TERMINAL,
+	       c.NOMBRE_COMUNA,
+	       u.RUT_EMPRESA, e.RAZON_SOCIAL
+	FROM LEHZ_UTILIZAN u
+	INNER JOIN LEHZ_TERMINAL t ON t.ID_TERMINAL = u.ID_TERMINAL
+	INNER JOIN LEHZ_COMUNA c ON c.ID_COMUNA = t.ID_COMUNA
+	INNER JOIN LEHZ_EMPRESA e ON e.RUT_EMPRESA = u.RUT_EMPRESA
+	ORDER BY e.RAZON_SOCIAL ASC, t.NOMBRE ASC;
+END LEHZ_PS_LISTAR_UTILIZAN;
+/
+CREATE OR REPLACE PROCEDURE "LEHZ_PS_LISTAR_VIAJES" (
+    p_cursor OUT SYS_REFCURSOR
+) IS
+BEGIN
+    OPEN p_cursor FOR
+	SELECT v.ID_VIAJE,
+	       TO_CHAR(v.FECHA_VIAJE, 'DD/MM/YYYY') AS FECHA_VIAJE,
+	       v.FECHA_VIAJE AS FECHA_ORDEN,
+	       v.ID_HORARIO,
+	       TO_CHAR(h.HORA_SALIDA, 'HH24:MI') AS HORA_SALIDA,
+	       TO_CHAR(h.HORA_LLEGADA, 'HH24:MI') AS HORA_LLEGADA,
+	       v.ID_RUTA, r.NOMBRE_RUTA,
+	       o.NOMBRE AS TERMINAL_ORIGEN,
+	       d.NOMBRE AS TERMINAL_DESTINO,
+	       r.DISTANCIA,
+	       (SELECT COUNT(DISTINCT c.PATENTE_BUS)
+		  FROM LEHZ_CONDUCE c
+		 WHERE c.ID_VIAJE = v.ID_VIAJE) AS TOTAL_BUSES,
+	       (SELECT COUNT(*)
+		  FROM LEHZ_BOLETO b
+		 WHERE b.ID_VIAJE = v.ID_VIAJE
+		   AND b.ESTADO IN ('EMITIDO', 'USADO')) AS BOLETOS_ACTIVOS
+	FROM LEHZ_VIAJE v
+	INNER JOIN LEHZ_HORARIO h ON h.ID_HORARIO = v.ID_HORARIO
+	INNER JOIN LEHZ_RUTA r ON r.ID_RUTA = v.ID_RUTA
+	INNER JOIN LEHZ_TERMINAL o ON o.ID_TERMINAL = r.ID_TERMINAL_ORIGEN
+	INNER JOIN LEHZ_TERMINAL d ON d.ID_TERMINAL = r.ID_TERMINAL_DESTINO
+	ORDER BY v.FECHA_VIAJE DESC, h.HORA_SALIDA ASC;
+END LEHZ_PS_LISTAR_VIAJES;
+/
+CREATE OR REPLACE PROCEDURE "LEHZ_PS_LOGIN" (
+    p_username IN  VARCHAR2,
+    p_password IN  VARCHAR2,
+    p_cursor   OUT SYS_REFCURSOR
+) IS
+    v_hash  VARCHAR2(128);
+    v_count NUMBER := 0;
+BEGIN
+    SELECT RAWTOHEX(STANDARD_HASH(p_password, 'SHA256'))
+      INTO v_hash
+      FROM DUAL;
+
+    SELECT COUNT(*)
+      INTO v_count
+      FROM LEHZ_USUARIO u
+     WHERE LOWER(u.USERNAME) = LOWER(TRIM(p_username))
+       AND u.PASSWORD_HASH = v_hash
+       AND u.ESTADO = 'ACTIVO';
+
+    IF v_count = 0 THEN
+	RAISE_APPLICATION_ERROR(-20004, 'Usuario o contrasena incorrectos, o la cuenta esta inactiva.');
+    END IF;
+
+    OPEN p_cursor FOR
+	SELECT u.ID_USUARIO,
+	       u.USERNAME,
+	       u.NOMBRE_COMPLETO,
+	       u.EMAIL,
+	       r.ID_ROL,
+	       r.NOMBRE_ROL
+	  FROM LEHZ_USUARIO u
+	  INNER JOIN LEHZ_ROL r ON u.ID_ROL = r.ID_ROL
+	 WHERE LOWER(u.USERNAME) = LOWER(TRIM(p_username))
+	   AND u.PASSWORD_HASH = v_hash
+	   AND u.ESTADO = 'ACTIVO';
+END LEHZ_PS_LOGIN;
+/
+CREATE OR REPLACE PROCEDURE "LEHZ_PS_REGISTRAR_PUBLICO" (
+    p_username		 IN  VARCHAR2,
+    p_password		 IN  VARCHAR2,
+    p_password_confirm	 IN  VARCHAR2,
+    p_nombre_completo	 IN  VARCHAR2,
+    p_email		 IN  VARCHAR2,
+    p_estado		 OUT VARCHAR2,
+    p_mensaje		 OUT VARCHAR2
+) IS
+BEGIN
+    IF p_password IS NULL OR p_password_confirm IS NULL
+       OR p_password <> p_password_confirm THEN
+	p_estado  := 'ADVERTENCIA';
+	p_mensaje := 'Las contrasenas no coinciden. Escribe la misma clave en ambos campos.';
+	RETURN;
+    END IF;
+
+    LEHZ_PS_CREAR_USUARIO_SEGURO(
+	p_username, p_password, p_nombre_completo, p_email,
+	'VENDEDOR', 'PUBLICO', p_estado, p_mensaje
+    );
+END LEHZ_PS_REGISTRAR_PUBLICO;
+/
+CREATE OR REPLACE PROCEDURE "LEHZ_PS_REP_COSTOS_MANTENCION" (
+    p_cursor OUT SYS_REFCURSOR
+) IS
+BEGIN
+    OPEN p_cursor FOR
+	SELECT e.RUT_EMPRESA,
+	       e.RAZON_SOCIAL,
+	       b.PATENTE_BUS,
+	       b.MARCA || ' ' || b.MODELO AS BUS,
+	       COUNT(m.ID_MANTENCION) AS TOTAL_MANTENCIONES,
+	       NVL(SUM(m.COSTO_MANTENCION), 0) AS COSTO_TOTAL_MANTENCIONES,
+	       NVL(ROUND(AVG(m.COSTO_MANTENCION), 0), 0) AS COSTO_PROMEDIO,
+	       TO_CHAR(MAX(m.FECHA_MANTENCION), 'DD/MM/YYYY') AS ULTIMA_MANTENCION
+	  FROM LEHZ_EMPRESA e
+	  INNER JOIN LEHZ_BUS b ON e.RUT_EMPRESA = b.RUT_EMPRESA
+	  LEFT JOIN LEHZ_MANTENCION m ON b.PATENTE_BUS = m.PATENTE_BUS
+	 GROUP BY e.RUT_EMPRESA, e.RAZON_SOCIAL, b.PATENTE_BUS, b.MARCA, b.MODELO
+	 ORDER BY COSTO_TOTAL_MANTENCIONES DESC, e.RAZON_SOCIAL ASC;
+END LEHZ_PS_REP_COSTOS_MANTENCION;
+/
+CREATE OR REPLACE PROCEDURE "LEHZ_PS_REP_ITINERARIO_PARADAS" (
+    p_cursor OUT SYS_REFCURSOR
+) IS
+BEGIN
+    OPEN p_cursor FOR
+	WITH PARADAS AS (
+	    SELECT r.ID_RUTA,
+		   r.NOMBRE_RUTA,
+		   rp.ORDEN_PARADA,
+		   rp.ID_TERMINAL,
+		   t.NOMBRE AS TERMINAL,
+		   c.NOMBRE_COMUNA,
+		   rp.MINUTOS_DESDE_ORIG,
+		   rp.PERMITE_BAJADA
+	      FROM LEHZ_RUTA r
+	      INNER JOIN LEHZ_RUTA_PARADA rp ON rp.ID_RUTA = r.ID_RUTA
+	      INNER JOIN LEHZ_TERMINAL t ON t.ID_TERMINAL = rp.ID_TERMINAL
+	      INNER JOIN LEHZ_COMUNA c ON c.ID_COMUNA = t.ID_COMUNA
+	),
+	RESUMEN_RUTA AS (
+	    SELECT p.ID_RUTA,
+		   COUNT(*) AS TOTAL_PARADAS,
+		   COUNT(DISTINCT p.ID_TERMINAL) AS TOTAL_TERMINALES,
+		   COUNT(DISTINCT p.NOMBRE_COMUNA) AS TOTAL_CIUDADES
+	      FROM PARADAS p
+	     GROUP BY p.ID_RUTA
+	)
+	SELECT p.ID_RUTA,
+	       p.NOMBRE_RUTA,
+	       rr.TOTAL_PARADAS,
+	       rr.TOTAL_TERMINALES,
+	       rr.TOTAL_CIUDADES,
+	       p.ORDEN_PARADA,
+	       p.TERMINAL,
+	       p.NOMBRE_COMUNA AS CIUDAD,
+	       p.MINUTOS_DESDE_ORIG,
+	       CASE WHEN p.PERMITE_BAJADA = 'S' THEN 'SI' ELSE 'NO' END AS PERMITE_BAJADA,
+	       (SELECT COUNT(*)
+		  FROM LEHZ_PASAJE_BAJADA pb
+		  INNER JOIN LEHZ_BOLETO b ON b.ID_BOLETO = pb.ID_BOLETO
+		  INNER JOIN LEHZ_VIAJE v ON v.ID_VIAJE = b.ID_VIAJE
+		 WHERE v.ID_RUTA = p.ID_RUTA
+		   AND pb.ID_TERMINAL_BAJADA = p.ID_TERMINAL
+		   AND b.ESTADO <> 'ANULADO') AS TOTAL_BAJADAS
+	  FROM PARADAS p
+	  INNER JOIN RESUMEN_RUTA rr ON rr.ID_RUTA = p.ID_RUTA
+	 ORDER BY p.NOMBRE_RUTA ASC, p.ORDEN_PARADA ASC;
+END LEHZ_PS_REP_ITINERARIO_PARADAS;
+/
+CREATE OR REPLACE PROCEDURE "LEHZ_PS_REP_OCUPACION_ASIENTOS" (
+    p_cursor OUT SYS_REFCURSOR
+) IS
+BEGIN
+    OPEN p_cursor FOR
+	SELECT vb.ID_VIAJE,
+	       vb.FECHA_VIAJE_TEXTO AS FECHA_VIAJE,
+	       vb.NOMBRE_RUTA,
+	       vb.HORA_SALIDA,
+	       vb.PATENTE_BUS,
+	       vb.CONDUCTORES,
+	       vb.CAPACIDAD AS CAPACIDAD_TOTAL,
+	       (SELECT COUNT(*)
+		  FROM LEHZ_BOLETO b
+		 WHERE b.ID_VIAJE = vb.ID_VIAJE
+		   AND b.PATENTE_BUS = vb.PATENTE_BUS
+		   AND b.ESTADO IN ('EMITIDO', 'USADO')) AS ASIENTOS_VENDIDOS,
+	       vb.CAPACIDAD - (SELECT COUNT(*)
+		  FROM LEHZ_BOLETO b
+		 WHERE b.ID_VIAJE = vb.ID_VIAJE
+		   AND b.PATENTE_BUS = vb.PATENTE_BUS
+		   AND b.ESTADO IN ('EMITIDO', 'USADO')) AS ASIENTOS_DISPONIBLES,
+	       CASE
+		   WHEN vb.CAPACIDAD > 0 THEN
+		       ROUND((SELECT COUNT(*)
+				FROM LEHZ_BOLETO b
+			       WHERE b.ID_VIAJE = vb.ID_VIAJE
+				 AND b.PATENTE_BUS = vb.PATENTE_BUS
+				 AND b.ESTADO IN ('EMITIDO', 'USADO')) * 100 / vb.CAPACIDAD, 1)
+		   ELSE 0
+	       END AS PORCENTAJE_OCUPACION
+	  FROM LEHZ_VW_VIAJE_BUSES vb
+	 ORDER BY vb.FECHA_VIAJE DESC, vb.HORA_SALIDA ASC, vb.PATENTE_BUS ASC;
+END LEHZ_PS_REP_OCUPACION_ASIENTOS;
+/
+CREATE OR REPLACE PROCEDURE "LEHZ_PS_REP_RECAUDACION_VIAJES" (
+    p_cursor OUT SYS_REFCURSOR
+) IS
+BEGIN
+    OPEN p_cursor FOR
+	SELECT v.ID_VIAJE,
+	       TO_CHAR(v.FECHA_VIAJE, 'DD/MM/YYYY') AS FECHA_VIAJE,
+	       r.NOMBRE_RUTA,
+	       o.NOMBRE AS TERMINAL_ORIGEN,
+	       d.NOMBRE AS TERMINAL_DESTINO,
+	       COUNT(DISTINCT b.ID_BOLETO) AS TOTAL_BOLETOS_VENDIDOS,
+	       NVL(SUM(p.MONTO_PAGO), 0) AS RECAUDACION_TOTAL
+	  FROM LEHZ_VIAJE v
+	  INNER JOIN LEHZ_RUTA r ON r.ID_RUTA = v.ID_RUTA
+	  INNER JOIN LEHZ_TERMINAL o ON o.ID_TERMINAL = r.ID_TERMINAL_ORIGEN
+	  INNER JOIN LEHZ_TERMINAL d ON d.ID_TERMINAL = r.ID_TERMINAL_DESTINO
+	  LEFT JOIN LEHZ_BOLETO b
+		 ON b.ID_VIAJE = v.ID_VIAJE
+		AND b.ESTADO <> 'ANULADO'
+	  LEFT JOIN LEHZ_PAGO p ON p.ID_BOLETO = b.ID_BOLETO
+	 GROUP BY v.ID_VIAJE, v.FECHA_VIAJE, r.NOMBRE_RUTA, o.NOMBRE, d.NOMBRE
+	 ORDER BY v.FECHA_VIAJE DESC, v.ID_VIAJE DESC;
+END LEHZ_PS_REP_RECAUDACION_VIAJES;
+/
+CREATE OR REPLACE FORCE VIEW "LEHZ_VW_ASIENTOS_DISPONIBLES" ("ID_VIAJE", "PATENTE_BUS", "NUMERO_ASIENTO", "PISO", "UBICACION", "ESTADO_ASIENTO") AS 
+  SELECT v.ID_VIAJE,
+       c.PATENTE_BUS,
+       a.NUMERO_ASIENTO,
+       a.PISO,
+       a.UBICACION,
+       CASE
+	   WHEN EXISTS (
+	       SELECT 1
+		 FROM LEHZ_BOLETO b
+		WHERE b.ID_VIAJE = v.ID_VIAJE
+		  AND b.PATENTE_BUS = c.PATENTE_BUS
+		  AND b.NUMERO_ASIENTO = a.NUMERO_ASIENTO
+		  AND b.ESTADO IN ('EMITIDO', 'USADO')
+	   ) THEN 'OCUPADO'
+	   ELSE 'DISPONIBLE'
+       END AS ESTADO_ASIENTO
+  FROM LEHZ_VIAJE v
+  INNER JOIN (SELECT DISTINCT ID_VIAJE, PATENTE_BUS FROM LEHZ_CONDUCE) c
+	  ON c.ID_VIAJE = v.ID_VIAJE
+INNER JOIN LEHZ_ASIENTO a ON a.PATENTE_BUS = c.PATENTE_BUS;
+CREATE OR REPLACE FORCE VIEW "LEHZ_VW_BOLETOS" ("ID_BOLETO", "FECHA_EMISION", "VALOR_BOLETO", "ESTADO", "RUT_PASAJERO", "PASAJERO", "ID_VIAJE", "FECHA_VIAJE", "NOMBRE_RUTA", "PATENTE_BUS", "NUMERO_ASIENTO", "METODO_PAGO", "TERMINAL_BAJADA", "FECHA_ANULACION", "MOTIVO_ANULACION") AS 
+  SELECT b.ID_BOLETO,
+       TO_CHAR(b.FECHA_EMISION_BOLETO, 'DD/MM/YYYY') AS FECHA_EMISION,
+       b.VALOR_BOLETO,
+       b.ESTADO,
+       b.RUT_PASAJERO,
+       p.NOMBRE_PASAJERO || ' ' || p.APELLIDO1_PASAJERO AS PASAJERO,
+       b.ID_VIAJE,
+       TO_CHAR(v.FECHA_VIAJE, 'DD/MM/YYYY') AS FECHA_VIAJE,
+       r.NOMBRE_RUTA,
+       b.PATENTE_BUS,
+       b.NUMERO_ASIENTO,
+       pg.METODO_PAGO,
+       tb.NOMBRE AS TERMINAL_BAJADA,
+       b.FECHA_ANULACION,
+       b.MOTIVO_ANULACION
+  FROM LEHZ_BOLETO b
+  INNER JOIN LEHZ_PASAJERO p ON p.RUT_PASAJERO = b.RUT_PASAJERO
+  INNER JOIN LEHZ_VIAJE v ON v.ID_VIAJE = b.ID_VIAJE
+  INNER JOIN LEHZ_RUTA r ON r.ID_RUTA = v.ID_RUTA
+  LEFT JOIN LEHZ_PAGO pg ON pg.ID_BOLETO = b.ID_BOLETO
+  LEFT JOIN LEHZ_PASAJE_BAJADA pb ON pb.ID_BOLETO = b.ID_BOLETO
+LEFT JOIN LEHZ_TERMINAL tb ON tb.ID_TERMINAL = pb.ID_TERMINAL_BAJADA;
+CREATE OR REPLACE FORCE VIEW "LEHZ_VW_COMUNAS_CHILE" ("ORDEN", "NOMBRE_COMUNA", "NOMBRE_REGION") AS 
+  SELECT a.ORDEN, a.NOMBRE_COMUNA, a.NOMBRE_REGION
+FROM LEHZ_VW_COMUNAS_CHILE_ALL a
+WHERE EXISTS (
+    SELECT 1 FROM LEHZ_REGION r
+     WHERE UPPER(r.NOMBRE_REGION) = UPPER(a.NOMBRE_REGION)
+)
+AND NOT EXISTS (
+    SELECT 1
+      FROM LEHZ_COMUNA c
+      JOIN LEHZ_REGION r ON r.ID_REGION = c.ID_REGION
+     WHERE c.NOMBRE_COMUNA = a.NOMBRE_COMUNA
+       AND UPPER(r.NOMBRE_REGION) = UPPER(a.NOMBRE_REGION)
+);
+CREATE OR REPLACE FORCE VIEW "LEHZ_VW_COMUNAS_CHILE_ALL" ("ORDEN", "NOMBRE_COMUNA", "NOMBRE_REGION") AS 
+  SELECT 1 AS ORDEN, 'Algarrobo' AS NOMBRE_COMUNA, 'Region de Valparaiso' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 2 AS ORDEN, 'Alhue' AS NOMBRE_COMUNA, 'Region Metropolitana' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 3 AS ORDEN, 'Alto Biobio' AS NOMBRE_COMUNA, 'Region del Biobio' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 4 AS ORDEN, 'Alto del Carmen' AS NOMBRE_COMUNA, 'Region de Atacama' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 5 AS ORDEN, 'Alto Hospicio' AS NOMBRE_COMUNA, 'Region de Tarapaca' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 6 AS ORDEN, 'Ancud' AS NOMBRE_COMUNA, 'Region de Los Lagos' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 7 AS ORDEN, 'Andacollo' AS NOMBRE_COMUNA, 'Region de Coquimbo' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 8 AS ORDEN, 'Angol' AS NOMBRE_COMUNA, 'Region de La Araucania' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 9 AS ORDEN, 'Antartica' AS NOMBRE_COMUNA, 'Region de Magallanes y de la Antartica Chilena' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 10 AS ORDEN, 'Antofagasta' AS NOMBRE_COMUNA, 'Region de Antofagasta' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 11 AS ORDEN, 'Antuco' AS NOMBRE_COMUNA, 'Region del Biobio' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 12 AS ORDEN, 'Arauco' AS NOMBRE_COMUNA, 'Region del Biobio' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 13 AS ORDEN, 'Arica' AS NOMBRE_COMUNA, 'Region de Arica y Parinacota' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 14 AS ORDEN, 'Aysen' AS NOMBRE_COMUNA, 'Region de Aysen del General Carlos Ibanez del Campo' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 15 AS ORDEN, 'Buin' AS NOMBRE_COMUNA, 'Region Metropolitana' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 16 AS ORDEN, 'Bulnes' AS NOMBRE_COMUNA, 'Region de Nuble' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 17 AS ORDEN, 'Cabildo' AS NOMBRE_COMUNA, 'Region de Valparaiso' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 18 AS ORDEN, 'Cabo de Hornos' AS NOMBRE_COMUNA, 'Region de Magallanes y de la Antartica Chilena' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 19 AS ORDEN, 'Cabrero' AS NOMBRE_COMUNA, 'Region del Biobio' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 20 AS ORDEN, 'Calama' AS NOMBRE_COMUNA, 'Region de Antofagasta' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 21 AS ORDEN, 'Calbuco' AS NOMBRE_COMUNA, 'Region de Los Lagos' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 22 AS ORDEN, 'Caldera' AS NOMBRE_COMUNA, 'Region de Atacama' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 23 AS ORDEN, 'Calera de Tango' AS NOMBRE_COMUNA, 'Region Metropolitana' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 24 AS ORDEN, 'Calle Larga' AS NOMBRE_COMUNA, 'Region de Valparaiso' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 25 AS ORDEN, 'Camarones' AS NOMBRE_COMUNA, 'Region de Arica y Parinacota' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 26 AS ORDEN, 'Camina' AS NOMBRE_COMUNA, 'Region de Tarapaca' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 27 AS ORDEN, 'Canela' AS NOMBRE_COMUNA, 'Region de Coquimbo' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 28 AS ORDEN, 'Canete' AS NOMBRE_COMUNA, 'Region del Biobio' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 29 AS ORDEN, 'Carahue' AS NOMBRE_COMUNA, 'Region de La Araucania' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 30 AS ORDEN, 'Cartagena' AS NOMBRE_COMUNA, 'Region de Valparaiso' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 31 AS ORDEN, 'Casablanca' AS NOMBRE_COMUNA, 'Region de Valparaiso' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 32 AS ORDEN, 'Castro' AS NOMBRE_COMUNA, 'Region de Los Lagos' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 33 AS ORDEN, 'Catemu' AS NOMBRE_COMUNA, 'Region de Valparaiso' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 34 AS ORDEN, 'Cauquenes' AS NOMBRE_COMUNA, 'Region del Maule' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 35 AS ORDEN, 'Cerrillos' AS NOMBRE_COMUNA, 'Region Metropolitana' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 36 AS ORDEN, 'Cerro Navia' AS NOMBRE_COMUNA, 'Region Metropolitana' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 37 AS ORDEN, 'Chaiten' AS NOMBRE_COMUNA, 'Region de Los Lagos' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 38 AS ORDEN, 'Chanaral' AS NOMBRE_COMUNA, 'Region de Atacama' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 39 AS ORDEN, 'Chanco' AS NOMBRE_COMUNA, 'Region del Maule' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 40 AS ORDEN, 'Chepica' AS NOMBRE_COMUNA, 'Region del Libertador General Bernardo OHiggins' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 41 AS ORDEN, 'Chiguayante' AS NOMBRE_COMUNA, 'Region del Biobio' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 42 AS ORDEN, 'Chile Chico' AS NOMBRE_COMUNA, 'Region de Aysen del General Carlos Ibanez del Campo' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 43 AS ORDEN, 'Chillan' AS NOMBRE_COMUNA, 'Region de Nuble' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 44 AS ORDEN, 'Chillan Viejo' AS NOMBRE_COMUNA, 'Region de Nuble' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 45 AS ORDEN, 'Chimbarongo' AS NOMBRE_COMUNA, 'Region del Libertador General Bernardo OHiggins' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 46 AS ORDEN, 'Cholchol' AS NOMBRE_COMUNA, 'Region de La Araucania' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 47 AS ORDEN, 'Chonchi' AS NOMBRE_COMUNA, 'Region de Los Lagos' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 48 AS ORDEN, 'Cisnes' AS NOMBRE_COMUNA, 'Region de Aysen del General Carlos Ibanez del Campo' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 49 AS ORDEN, 'Cobquecura' AS NOMBRE_COMUNA, 'Region de Nuble' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 50 AS ORDEN, 'Cochamo' AS NOMBRE_COMUNA, 'Region de Los Lagos' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 51 AS ORDEN, 'Cochrane' AS NOMBRE_COMUNA, 'Region de Aysen del General Carlos Ibanez del Campo' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 52 AS ORDEN, 'Codegua' AS NOMBRE_COMUNA, 'Region del Libertador General Bernardo OHiggins' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 53 AS ORDEN, 'Coelemu' AS NOMBRE_COMUNA, 'Region de Nuble' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 54 AS ORDEN, 'Coihueco' AS NOMBRE_COMUNA, 'Region de Nuble' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 55 AS ORDEN, 'Coinco' AS NOMBRE_COMUNA, 'Region del Libertador General Bernardo OHiggins' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 56 AS ORDEN, 'Colbun' AS NOMBRE_COMUNA, 'Region del Maule' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 57 AS ORDEN, 'Colchane' AS NOMBRE_COMUNA, 'Region de Tarapaca' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 58 AS ORDEN, 'Colina' AS NOMBRE_COMUNA, 'Region Metropolitana' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 59 AS ORDEN, 'Collipulli' AS NOMBRE_COMUNA, 'Region de La Araucania' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 60 AS ORDEN, 'Coltauco' AS NOMBRE_COMUNA, 'Region del Libertador General Bernardo OHiggins' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 61 AS ORDEN, 'Combarbala' AS NOMBRE_COMUNA, 'Region de Coquimbo' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 62 AS ORDEN, 'Concepcion' AS NOMBRE_COMUNA, 'Region del Biobio' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 63 AS ORDEN, 'Conchali' AS NOMBRE_COMUNA, 'Region Metropolitana' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 64 AS ORDEN, 'Concon' AS NOMBRE_COMUNA, 'Region de Valparaiso' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 65 AS ORDEN, 'Constitucion' AS NOMBRE_COMUNA, 'Region del Maule' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 66 AS ORDEN, 'Contulmo' AS NOMBRE_COMUNA, 'Region del Biobio' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 67 AS ORDEN, 'Copiapo' AS NOMBRE_COMUNA, 'Region de Atacama' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 68 AS ORDEN, 'Coquimbo' AS NOMBRE_COMUNA, 'Region de Coquimbo' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 69 AS ORDEN, 'Coronel' AS NOMBRE_COMUNA, 'Region del Biobio' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 70 AS ORDEN, 'Corral' AS NOMBRE_COMUNA, 'Region de Los Rios' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 71 AS ORDEN, 'Coyhaique' AS NOMBRE_COMUNA, 'Region de Aysen del General Carlos Ibanez del Campo' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 72 AS ORDEN, 'Cunco' AS NOMBRE_COMUNA, 'Region de La Araucania' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 73 AS ORDEN, 'Curacautin' AS NOMBRE_COMUNA, 'Region de La Araucania' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 74 AS ORDEN, 'Curacavi' AS NOMBRE_COMUNA, 'Region Metropolitana' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 75 AS ORDEN, 'Curaco de Velez' AS NOMBRE_COMUNA, 'Region de Los Lagos' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 76 AS ORDEN, 'Curanilahue' AS NOMBRE_COMUNA, 'Region del Biobio' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 77 AS ORDEN, 'Curarrehue' AS NOMBRE_COMUNA, 'Region de La Araucania' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 78 AS ORDEN, 'Curepto' AS NOMBRE_COMUNA, 'Region del Maule' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 79 AS ORDEN, 'Curico' AS NOMBRE_COMUNA, 'Region del Maule' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 80 AS ORDEN, 'Dalcahue' AS NOMBRE_COMUNA, 'Region de Los Lagos' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 81 AS ORDEN, 'Diego de Almagro' AS NOMBRE_COMUNA, 'Region de Atacama' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 82 AS ORDEN, 'Donihue' AS NOMBRE_COMUNA, 'Region del Libertador General Bernardo OHiggins' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 83 AS ORDEN, 'El Bosque' AS NOMBRE_COMUNA, 'Region Metropolitana' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 84 AS ORDEN, 'El Carmen' AS NOMBRE_COMUNA, 'Region de Nuble' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 85 AS ORDEN, 'El Monte' AS NOMBRE_COMUNA, 'Region Metropolitana' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 86 AS ORDEN, 'El Quisco' AS NOMBRE_COMUNA, 'Region de Valparaiso' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 87 AS ORDEN, 'El Tabo' AS NOMBRE_COMUNA, 'Region de Valparaiso' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 88 AS ORDEN, 'Empedrado' AS NOMBRE_COMUNA, 'Region del Maule' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 89 AS ORDEN, 'Ercilla' AS NOMBRE_COMUNA, 'Region de La Araucania' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 90 AS ORDEN, 'Estacion Central' AS NOMBRE_COMUNA, 'Region Metropolitana' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 91 AS ORDEN, 'Florida' AS NOMBRE_COMUNA, 'Region del Biobio' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 92 AS ORDEN, 'Freire' AS NOMBRE_COMUNA, 'Region de La Araucania' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 93 AS ORDEN, 'Freirina' AS NOMBRE_COMUNA, 'Region de Atacama' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 94 AS ORDEN, 'Fresia' AS NOMBRE_COMUNA, 'Region de Los Lagos' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 95 AS ORDEN, 'Frutillar' AS NOMBRE_COMUNA, 'Region de Los Lagos' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 96 AS ORDEN, 'Futaleufu' AS NOMBRE_COMUNA, 'Region de Los Lagos' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 97 AS ORDEN, 'Futrono' AS NOMBRE_COMUNA, 'Region de Los Rios' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 98 AS ORDEN, 'Galvarino' AS NOMBRE_COMUNA, 'Region de La Araucania' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 99 AS ORDEN, 'General Lagos' AS NOMBRE_COMUNA, 'Region de Arica y Parinacota' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 100 AS ORDEN, 'Gorbea' AS NOMBRE_COMUNA, 'Region de La Araucania' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 101 AS ORDEN, 'Graneros' AS NOMBRE_COMUNA, 'Region del Libertador General Bernardo OHiggins' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 102 AS ORDEN, 'Guaitecas' AS NOMBRE_COMUNA, 'Region de Aysen del General Carlos Ibanez del Campo' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 103 AS ORDEN, 'Hijuelas' AS NOMBRE_COMUNA, 'Region de Valparaiso' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 104 AS ORDEN, 'Hualaihue' AS NOMBRE_COMUNA, 'Region de Los Lagos' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 105 AS ORDEN, 'Hualane' AS NOMBRE_COMUNA, 'Region del Maule' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 106 AS ORDEN, 'Hualpen' AS NOMBRE_COMUNA, 'Region del Biobio' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 107 AS ORDEN, 'Hualqui' AS NOMBRE_COMUNA, 'Region del Biobio' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 108 AS ORDEN, 'Huara' AS NOMBRE_COMUNA, 'Region de Tarapaca' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 109 AS ORDEN, 'Huasco' AS NOMBRE_COMUNA, 'Region de Atacama' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 110 AS ORDEN, 'Huechuraba' AS NOMBRE_COMUNA, 'Region Metropolitana' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 111 AS ORDEN, 'Illapel' AS NOMBRE_COMUNA, 'Region de Coquimbo' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 112 AS ORDEN, 'Independencia' AS NOMBRE_COMUNA, 'Region Metropolitana' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 113 AS ORDEN, 'Iquique' AS NOMBRE_COMUNA, 'Region de Tarapaca' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 114 AS ORDEN, 'Isla de Maipo' AS NOMBRE_COMUNA, 'Region Metropolitana' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 115 AS ORDEN, 'Isla de Pascua' AS NOMBRE_COMUNA, 'Region de Valparaiso' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 116 AS ORDEN, 'Juan Fernandez' AS NOMBRE_COMUNA, 'Region de Valparaiso' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 117 AS ORDEN, 'La Calera' AS NOMBRE_COMUNA, 'Region de Valparaiso' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 118 AS ORDEN, 'La Cisterna' AS NOMBRE_COMUNA, 'Region Metropolitana' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 119 AS ORDEN, 'La Cruz' AS NOMBRE_COMUNA, 'Region de Valparaiso' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 120 AS ORDEN, 'La Estrella' AS NOMBRE_COMUNA, 'Region del Libertador General Bernardo OHiggins' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 121 AS ORDEN, 'La Florida' AS NOMBRE_COMUNA, 'Region Metropolitana' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 122 AS ORDEN, 'La Granja' AS NOMBRE_COMUNA, 'Region Metropolitana' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 123 AS ORDEN, 'La Higuera' AS NOMBRE_COMUNA, 'Region de Coquimbo' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 124 AS ORDEN, 'La Ligua' AS NOMBRE_COMUNA, 'Region de Valparaiso' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 125 AS ORDEN, 'La Pintana' AS NOMBRE_COMUNA, 'Region Metropolitana' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 126 AS ORDEN, 'La Reina' AS NOMBRE_COMUNA, 'Region Metropolitana' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 127 AS ORDEN, 'La Serena' AS NOMBRE_COMUNA, 'Region de Coquimbo' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 128 AS ORDEN, 'La Union' AS NOMBRE_COMUNA, 'Region de Los Rios' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 129 AS ORDEN, 'Lago Ranco' AS NOMBRE_COMUNA, 'Region de Los Rios' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 130 AS ORDEN, 'Lago Verde' AS NOMBRE_COMUNA, 'Region de Aysen del General Carlos Ibanez del Campo' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 131 AS ORDEN, 'Laguna Blanca' AS NOMBRE_COMUNA, 'Region de Magallanes y de la Antartica Chilena' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 132 AS ORDEN, 'Laja' AS NOMBRE_COMUNA, 'Region del Biobio' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 133 AS ORDEN, 'Lampa' AS NOMBRE_COMUNA, 'Region Metropolitana' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 134 AS ORDEN, 'Lanco' AS NOMBRE_COMUNA, 'Region de Los Rios' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 135 AS ORDEN, 'Las Cabras' AS NOMBRE_COMUNA, 'Region del Libertador General Bernardo OHiggins' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 136 AS ORDEN, 'Las Condes' AS NOMBRE_COMUNA, 'Region Metropolitana' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 137 AS ORDEN, 'Lautaro' AS NOMBRE_COMUNA, 'Region de La Araucania' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 138 AS ORDEN, 'Lebu' AS NOMBRE_COMUNA, 'Region del Biobio' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 139 AS ORDEN, 'Licanten' AS NOMBRE_COMUNA, 'Region del Maule' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 140 AS ORDEN, 'Limache' AS NOMBRE_COMUNA, 'Region de Valparaiso' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 141 AS ORDEN, 'Linares' AS NOMBRE_COMUNA, 'Region del Maule' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 142 AS ORDEN, 'Litueche' AS NOMBRE_COMUNA, 'Region del Libertador General Bernardo OHiggins' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 143 AS ORDEN, 'Llaillay' AS NOMBRE_COMUNA, 'Region de Valparaiso' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 144 AS ORDEN, 'Llanquihue' AS NOMBRE_COMUNA, 'Region de Los Lagos' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 145 AS ORDEN, 'Lo Barnechea' AS NOMBRE_COMUNA, 'Region Metropolitana' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 146 AS ORDEN, 'Lo Espejo' AS NOMBRE_COMUNA, 'Region Metropolitana' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 147 AS ORDEN, 'Lo Prado' AS NOMBRE_COMUNA, 'Region Metropolitana' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 148 AS ORDEN, 'Lolol' AS NOMBRE_COMUNA, 'Region del Libertador General Bernardo OHiggins' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 149 AS ORDEN, 'Loncoche' AS NOMBRE_COMUNA, 'Region de La Araucania' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 150 AS ORDEN, 'Longavi' AS NOMBRE_COMUNA, 'Region del Maule' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 151 AS ORDEN, 'Lonquimay' AS NOMBRE_COMUNA, 'Region de La Araucania' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 152 AS ORDEN, 'Los Alamos' AS NOMBRE_COMUNA, 'Region del Biobio' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 153 AS ORDEN, 'Los Andes' AS NOMBRE_COMUNA, 'Region de Valparaiso' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 154 AS ORDEN, 'Los Angeles' AS NOMBRE_COMUNA, 'Region del Biobio' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 155 AS ORDEN, 'Los Lagos' AS NOMBRE_COMUNA, 'Region de Los Rios' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 156 AS ORDEN, 'Los Muermos' AS NOMBRE_COMUNA, 'Region de Los Lagos' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 157 AS ORDEN, 'Los Sauces' AS NOMBRE_COMUNA, 'Region de La Araucania' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 158 AS ORDEN, 'Los Vilos' AS NOMBRE_COMUNA, 'Region de Coquimbo' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 159 AS ORDEN, 'Lota' AS NOMBRE_COMUNA, 'Region del Biobio' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 160 AS ORDEN, 'Lumaco' AS NOMBRE_COMUNA, 'Region de La Araucania' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 161 AS ORDEN, 'Machali' AS NOMBRE_COMUNA, 'Region del Libertador General Bernardo OHiggins' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 162 AS ORDEN, 'Macul' AS NOMBRE_COMUNA, 'Region Metropolitana' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 163 AS ORDEN, 'Mafil' AS NOMBRE_COMUNA, 'Region de Los Rios' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 164 AS ORDEN, 'Maipu' AS NOMBRE_COMUNA, 'Region Metropolitana' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 165 AS ORDEN, 'Malloa' AS NOMBRE_COMUNA, 'Region del Libertador General Bernardo OHiggins' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 166 AS ORDEN, 'Marchihue' AS NOMBRE_COMUNA, 'Region del Libertador General Bernardo OHiggins' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 167 AS ORDEN, 'Maria Elena' AS NOMBRE_COMUNA, 'Region de Antofagasta' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 168 AS ORDEN, 'Maria Pinto' AS NOMBRE_COMUNA, 'Region Metropolitana' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 169 AS ORDEN, 'Mariquina' AS NOMBRE_COMUNA, 'Region de Los Rios' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 170 AS ORDEN, 'Maule' AS NOMBRE_COMUNA, 'Region del Maule' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 171 AS ORDEN, 'Maullin' AS NOMBRE_COMUNA, 'Region de Los Lagos' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 172 AS ORDEN, 'Mejillones' AS NOMBRE_COMUNA, 'Region de Antofagasta' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 173 AS ORDEN, 'Melipeuco' AS NOMBRE_COMUNA, 'Region de La Araucania' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 174 AS ORDEN, 'Melipilla' AS NOMBRE_COMUNA, 'Region Metropolitana' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 175 AS ORDEN, 'Molina' AS NOMBRE_COMUNA, 'Region del Maule' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 176 AS ORDEN, 'Monte Patria' AS NOMBRE_COMUNA, 'Region de Coquimbo' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 177 AS ORDEN, 'Mostazal' AS NOMBRE_COMUNA, 'Region del Libertador General Bernardo OHiggins' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 178 AS ORDEN, 'Mulchen' AS NOMBRE_COMUNA, 'Region del Biobio' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 179 AS ORDEN, 'Nacimiento' AS NOMBRE_COMUNA, 'Region del Biobio' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 180 AS ORDEN, 'Nancagua' AS NOMBRE_COMUNA, 'Region del Libertador General Bernardo OHiggins' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 181 AS ORDEN, 'Natales' AS NOMBRE_COMUNA, 'Region de Magallanes y de la Antartica Chilena' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 182 AS ORDEN, 'Navidad' AS NOMBRE_COMUNA, 'Region del Libertador General Bernardo OHiggins' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 183 AS ORDEN, 'Negrete' AS NOMBRE_COMUNA, 'Region del Biobio' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 184 AS ORDEN, 'Ninhue' AS NOMBRE_COMUNA, 'Region de Nuble' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 185 AS ORDEN, 'Niquen' AS NOMBRE_COMUNA, 'Region de Nuble' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 186 AS ORDEN, 'Nogales' AS NOMBRE_COMUNA, 'Region de Valparaiso' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 187 AS ORDEN, 'Nueva Imperial' AS NOMBRE_COMUNA, 'Region de La Araucania' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 188 AS ORDEN, 'Nunoa' AS NOMBRE_COMUNA, 'Region Metropolitana' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 189 AS ORDEN, 'O''Higgins' AS NOMBRE_COMUNA, 'Region de Aysen del General Carlos Ibanez del Campo' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 190 AS ORDEN, 'Olivar' AS NOMBRE_COMUNA, 'Region del Libertador General Bernardo OHiggins' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 191 AS ORDEN, 'Ollague' AS NOMBRE_COMUNA, 'Region de Antofagasta' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 192 AS ORDEN, 'Olmue' AS NOMBRE_COMUNA, 'Region de Valparaiso' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 193 AS ORDEN, 'Osorno' AS NOMBRE_COMUNA, 'Region de Los Lagos' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 194 AS ORDEN, 'Ovalle' AS NOMBRE_COMUNA, 'Region de Coquimbo' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 195 AS ORDEN, 'Padre Hurtado' AS NOMBRE_COMUNA, 'Region Metropolitana' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 196 AS ORDEN, 'Padre Las Casas' AS NOMBRE_COMUNA, 'Region de La Araucania' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 197 AS ORDEN, 'Paiguano' AS NOMBRE_COMUNA, 'Region de Coquimbo' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 198 AS ORDEN, 'Paillaco' AS NOMBRE_COMUNA, 'Region de Los Rios' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 199 AS ORDEN, 'Paine' AS NOMBRE_COMUNA, 'Region Metropolitana' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 200 AS ORDEN, 'Palena' AS NOMBRE_COMUNA, 'Region de Los Lagos' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 201 AS ORDEN, 'Palmilla' AS NOMBRE_COMUNA, 'Region del Libertador General Bernardo OHiggins' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 202 AS ORDEN, 'Panguipulli' AS NOMBRE_COMUNA, 'Region de Los Rios' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 203 AS ORDEN, 'Panquehue' AS NOMBRE_COMUNA, 'Region de Valparaiso' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 204 AS ORDEN, 'Papudo' AS NOMBRE_COMUNA, 'Region de Valparaiso' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 205 AS ORDEN, 'Paredones' AS NOMBRE_COMUNA, 'Region del Libertador General Bernardo OHiggins' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 206 AS ORDEN, 'Parral' AS NOMBRE_COMUNA, 'Region del Maule' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 207 AS ORDEN, 'Pedro Aguirre Cerda' AS NOMBRE_COMUNA, 'Region Metropolitana' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 208 AS ORDEN, 'Pelarco' AS NOMBRE_COMUNA, 'Region del Maule' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 209 AS ORDEN, 'Pelluhue' AS NOMBRE_COMUNA, 'Region del Maule' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 210 AS ORDEN, 'Pemuco' AS NOMBRE_COMUNA, 'Region de Nuble' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 211 AS ORDEN, 'Penaflor' AS NOMBRE_COMUNA, 'Region Metropolitana' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 212 AS ORDEN, 'Penalolen' AS NOMBRE_COMUNA, 'Region Metropolitana' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 213 AS ORDEN, 'Pencahue' AS NOMBRE_COMUNA, 'Region del Maule' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 214 AS ORDEN, 'Penco' AS NOMBRE_COMUNA, 'Region del Biobio' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 215 AS ORDEN, 'Peralillo' AS NOMBRE_COMUNA, 'Region del Libertador General Bernardo OHiggins' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 216 AS ORDEN, 'Perquenco' AS NOMBRE_COMUNA, 'Region de La Araucania' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 217 AS ORDEN, 'Petorca' AS NOMBRE_COMUNA, 'Region de Valparaiso' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 218 AS ORDEN, 'Peumo' AS NOMBRE_COMUNA, 'Region del Libertador General Bernardo OHiggins' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 219 AS ORDEN, 'Pica' AS NOMBRE_COMUNA, 'Region de Tarapaca' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 220 AS ORDEN, 'Pichidegua' AS NOMBRE_COMUNA, 'Region del Libertador General Bernardo OHiggins' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 221 AS ORDEN, 'Pichilemu' AS NOMBRE_COMUNA, 'Region del Libertador General Bernardo OHiggins' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 222 AS ORDEN, 'Pinto' AS NOMBRE_COMUNA, 'Region de Nuble' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 223 AS ORDEN, 'Pirque' AS NOMBRE_COMUNA, 'Region Metropolitana' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 224 AS ORDEN, 'Pitrufquen' AS NOMBRE_COMUNA, 'Region de La Araucania' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 225 AS ORDEN, 'Placilla' AS NOMBRE_COMUNA, 'Region del Libertador General Bernardo OHiggins' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 226 AS ORDEN, 'Portezuelo' AS NOMBRE_COMUNA, 'Region de Nuble' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 227 AS ORDEN, 'Porvenir' AS NOMBRE_COMUNA, 'Region de Magallanes y de la Antartica Chilena' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 228 AS ORDEN, 'Pozo Almonte' AS NOMBRE_COMUNA, 'Region de Tarapaca' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 229 AS ORDEN, 'Primavera' AS NOMBRE_COMUNA, 'Region de Magallanes y de la Antartica Chilena' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 230 AS ORDEN, 'Providencia' AS NOMBRE_COMUNA, 'Region Metropolitana' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 231 AS ORDEN, 'Puchuncavi' AS NOMBRE_COMUNA, 'Region de Valparaiso' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 232 AS ORDEN, 'Pucon' AS NOMBRE_COMUNA, 'Region de La Araucania' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 233 AS ORDEN, 'Pudahuel' AS NOMBRE_COMUNA, 'Region Metropolitana' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 234 AS ORDEN, 'Puente Alto' AS NOMBRE_COMUNA, 'Region Metropolitana' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 235 AS ORDEN, 'Puerto Montt' AS NOMBRE_COMUNA, 'Region de Los Lagos' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 236 AS ORDEN, 'Puerto Octay' AS NOMBRE_COMUNA, 'Region de Los Lagos' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 237 AS ORDEN, 'Puerto Varas' AS NOMBRE_COMUNA, 'Region de Los Lagos' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 238 AS ORDEN, 'Pumanque' AS NOMBRE_COMUNA, 'Region del Libertador General Bernardo OHiggins' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 239 AS ORDEN, 'Punitaqui' AS NOMBRE_COMUNA, 'Region de Coquimbo' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 240 AS ORDEN, 'Punta Arenas' AS NOMBRE_COMUNA, 'Region de Magallanes y de la Antartica Chilena' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 241 AS ORDEN, 'Puqueldon' AS NOMBRE_COMUNA, 'Region de Los Lagos' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 242 AS ORDEN, 'Puren' AS NOMBRE_COMUNA, 'Region de La Araucania' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 243 AS ORDEN, 'Purranque' AS NOMBRE_COMUNA, 'Region de Los Lagos' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 244 AS ORDEN, 'Putaendo' AS NOMBRE_COMUNA, 'Region de Valparaiso' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 245 AS ORDEN, 'Putre' AS NOMBRE_COMUNA, 'Region de Arica y Parinacota' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 246 AS ORDEN, 'Puyehue' AS NOMBRE_COMUNA, 'Region de Los Lagos' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 247 AS ORDEN, 'Queilen' AS NOMBRE_COMUNA, 'Region de Los Lagos' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 248 AS ORDEN, 'Quellon' AS NOMBRE_COMUNA, 'Region de Los Lagos' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 249 AS ORDEN, 'Quemchi' AS NOMBRE_COMUNA, 'Region de Los Lagos' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 250 AS ORDEN, 'Quilaco' AS NOMBRE_COMUNA, 'Region del Biobio' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 251 AS ORDEN, 'Quilicura' AS NOMBRE_COMUNA, 'Region Metropolitana' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 252 AS ORDEN, 'Quilleco' AS NOMBRE_COMUNA, 'Region del Biobio' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 253 AS ORDEN, 'Quillon' AS NOMBRE_COMUNA, 'Region de Nuble' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 254 AS ORDEN, 'Quillota' AS NOMBRE_COMUNA, 'Region de Valparaiso' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 255 AS ORDEN, 'Quilpue' AS NOMBRE_COMUNA, 'Region de Valparaiso' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 256 AS ORDEN, 'Quinchao' AS NOMBRE_COMUNA, 'Region de Los Lagos' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 257 AS ORDEN, 'Quinta de Tilcoco' AS NOMBRE_COMUNA, 'Region del Libertador General Bernardo OHiggins' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 258 AS ORDEN, 'Quinta Normal' AS NOMBRE_COMUNA, 'Region Metropolitana' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 259 AS ORDEN, 'Quintero' AS NOMBRE_COMUNA, 'Region de Valparaiso' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 260 AS ORDEN, 'Quirihue' AS NOMBRE_COMUNA, 'Region de Nuble' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 261 AS ORDEN, 'Rancagua' AS NOMBRE_COMUNA, 'Region del Libertador General Bernardo OHiggins' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 262 AS ORDEN, 'Ranquil' AS NOMBRE_COMUNA, 'Region de Nuble' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 263 AS ORDEN, 'Rauco' AS NOMBRE_COMUNA, 'Region del Maule' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 264 AS ORDEN, 'Recoleta' AS NOMBRE_COMUNA, 'Region Metropolitana' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 265 AS ORDEN, 'Renaico' AS NOMBRE_COMUNA, 'Region de La Araucania' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 266 AS ORDEN, 'Renca' AS NOMBRE_COMUNA, 'Region Metropolitana' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 267 AS ORDEN, 'Rengo' AS NOMBRE_COMUNA, 'Region del Libertador General Bernardo OHiggins' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 268 AS ORDEN, 'Requinoa' AS NOMBRE_COMUNA, 'Region del Libertador General Bernardo OHiggins' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 269 AS ORDEN, 'Retiro' AS NOMBRE_COMUNA, 'Region del Maule' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 270 AS ORDEN, 'Rinconada' AS NOMBRE_COMUNA, 'Region de Valparaiso' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 271 AS ORDEN, 'Rio Bueno' AS NOMBRE_COMUNA, 'Region de Los Rios' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 272 AS ORDEN, 'Rio Claro' AS NOMBRE_COMUNA, 'Region del Maule' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 273 AS ORDEN, 'Rio Hurtado' AS NOMBRE_COMUNA, 'Region de Coquimbo' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 274 AS ORDEN, 'Rio Ibanez' AS NOMBRE_COMUNA, 'Region de Aysen del General Carlos Ibanez del Campo' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 275 AS ORDEN, 'Rio Negro' AS NOMBRE_COMUNA, 'Region de Los Lagos' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 276 AS ORDEN, 'Rio Verde' AS NOMBRE_COMUNA, 'Region de Magallanes y de la Antartica Chilena' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 277 AS ORDEN, 'Romeral' AS NOMBRE_COMUNA, 'Region del Maule' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 278 AS ORDEN, 'Saavedra' AS NOMBRE_COMUNA, 'Region de La Araucania' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 279 AS ORDEN, 'Sagrada Familia' AS NOMBRE_COMUNA, 'Region del Maule' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 280 AS ORDEN, 'Salamanca' AS NOMBRE_COMUNA, 'Region de Coquimbo' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 281 AS ORDEN, 'San Antonio' AS NOMBRE_COMUNA, 'Region de Valparaiso' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 282 AS ORDEN, 'San Bernardo' AS NOMBRE_COMUNA, 'Region Metropolitana' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 283 AS ORDEN, 'San Carlos' AS NOMBRE_COMUNA, 'Region de Nuble' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 284 AS ORDEN, 'San Clemente' AS NOMBRE_COMUNA, 'Region del Maule' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 285 AS ORDEN, 'San Esteban' AS NOMBRE_COMUNA, 'Region de Valparaiso' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 286 AS ORDEN, 'San Fabian' AS NOMBRE_COMUNA, 'Region de Nuble' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 287 AS ORDEN, 'San Felipe' AS NOMBRE_COMUNA, 'Region de Valparaiso' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 288 AS ORDEN, 'San Fernando' AS NOMBRE_COMUNA, 'Region del Libertador General Bernardo OHiggins' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 289 AS ORDEN, 'San Gregorio' AS NOMBRE_COMUNA, 'Region de Magallanes y de la Antartica Chilena' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 290 AS ORDEN, 'San Ignacio' AS NOMBRE_COMUNA, 'Region de Nuble' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 291 AS ORDEN, 'San Javier' AS NOMBRE_COMUNA, 'Region del Maule' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 292 AS ORDEN, 'San Joaquin' AS NOMBRE_COMUNA, 'Region Metropolitana' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 293 AS ORDEN, 'San Jose de Maipo' AS NOMBRE_COMUNA, 'Region Metropolitana' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 294 AS ORDEN, 'San Juan de la Costa' AS NOMBRE_COMUNA, 'Region de Los Lagos' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 295 AS ORDEN, 'San Miguel' AS NOMBRE_COMUNA, 'Region Metropolitana' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 296 AS ORDEN, 'San Nicolas' AS NOMBRE_COMUNA, 'Region de Nuble' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 297 AS ORDEN, 'San Pablo' AS NOMBRE_COMUNA, 'Region de Los Lagos' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 298 AS ORDEN, 'San Pedro' AS NOMBRE_COMUNA, 'Region Metropolitana' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 299 AS ORDEN, 'San Pedro de Atacama' AS NOMBRE_COMUNA, 'Region de Antofagasta' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 300 AS ORDEN, 'San Pedro de la Paz' AS NOMBRE_COMUNA, 'Region del Biobio' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 301 AS ORDEN, 'San Rafael' AS NOMBRE_COMUNA, 'Region del Maule' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 302 AS ORDEN, 'San Ramon' AS NOMBRE_COMUNA, 'Region Metropolitana' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 303 AS ORDEN, 'San Rosendo' AS NOMBRE_COMUNA, 'Region del Biobio' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 304 AS ORDEN, 'San Vicente' AS NOMBRE_COMUNA, 'Region del Libertador General Bernardo OHiggins' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 305 AS ORDEN, 'Santa Barbara' AS NOMBRE_COMUNA, 'Region del Biobio' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 306 AS ORDEN, 'Santa Cruz' AS NOMBRE_COMUNA, 'Region del Libertador General Bernardo OHiggins' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 307 AS ORDEN, 'Santa Juana' AS NOMBRE_COMUNA, 'Region del Biobio' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 308 AS ORDEN, 'Santa Maria' AS NOMBRE_COMUNA, 'Region de Valparaiso' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 309 AS ORDEN, 'Santiago' AS NOMBRE_COMUNA, 'Region Metropolitana' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 310 AS ORDEN, 'Santo Domingo' AS NOMBRE_COMUNA, 'Region de Valparaiso' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 311 AS ORDEN, 'Sierra Gorda' AS NOMBRE_COMUNA, 'Region de Antofagasta' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 312 AS ORDEN, 'Talagante' AS NOMBRE_COMUNA, 'Region Metropolitana' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 313 AS ORDEN, 'Talca' AS NOMBRE_COMUNA, 'Region del Maule' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 314 AS ORDEN, 'Talcahuano' AS NOMBRE_COMUNA, 'Region del Biobio' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 315 AS ORDEN, 'Taltal' AS NOMBRE_COMUNA, 'Region de Antofagasta' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 316 AS ORDEN, 'Temuco' AS NOMBRE_COMUNA, 'Region de La Araucania' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 317 AS ORDEN, 'Teno' AS NOMBRE_COMUNA, 'Region del Maule' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 318 AS ORDEN, 'Teodoro Schmidt' AS NOMBRE_COMUNA, 'Region de La Araucania' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 319 AS ORDEN, 'Tierra Amarilla' AS NOMBRE_COMUNA, 'Region de Atacama' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 320 AS ORDEN, 'Tiltil' AS NOMBRE_COMUNA, 'Region Metropolitana' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 321 AS ORDEN, 'Timaukel' AS NOMBRE_COMUNA, 'Region de Magallanes y de la Antartica Chilena' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 322 AS ORDEN, 'Tirua' AS NOMBRE_COMUNA, 'Region del Biobio' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 323 AS ORDEN, 'Tocopilla' AS NOMBRE_COMUNA, 'Region de Antofagasta' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 324 AS ORDEN, 'Tolten' AS NOMBRE_COMUNA, 'Region de La Araucania' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 325 AS ORDEN, 'Tome' AS NOMBRE_COMUNA, 'Region del Biobio' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 326 AS ORDEN, 'Torres del Paine' AS NOMBRE_COMUNA, 'Region de Magallanes y de la Antartica Chilena' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 327 AS ORDEN, 'Tortel' AS NOMBRE_COMUNA, 'Region de Aysen del General Carlos Ibanez del Campo' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 328 AS ORDEN, 'Traiguen' AS NOMBRE_COMUNA, 'Region de La Araucania' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 329 AS ORDEN, 'Treguaco' AS NOMBRE_COMUNA, 'Region de Nuble' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 330 AS ORDEN, 'Tucapel' AS NOMBRE_COMUNA, 'Region del Biobio' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 331 AS ORDEN, 'Valdivia' AS NOMBRE_COMUNA, 'Region de Los Rios' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 332 AS ORDEN, 'Vallenar' AS NOMBRE_COMUNA, 'Region de Atacama' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 333 AS ORDEN, 'Valparaiso' AS NOMBRE_COMUNA, 'Region de Valparaiso' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 334 AS ORDEN, 'Vichuquen' AS NOMBRE_COMUNA, 'Region del Maule' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 335 AS ORDEN, 'Victoria' AS NOMBRE_COMUNA, 'Region de La Araucania' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 336 AS ORDEN, 'Vicuna' AS NOMBRE_COMUNA, 'Region de Coquimbo' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 337 AS ORDEN, 'Vilcun' AS NOMBRE_COMUNA, 'Region de La Araucania' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 338 AS ORDEN, 'Villa Alegre' AS NOMBRE_COMUNA, 'Region del Maule' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 339 AS ORDEN, 'Villa Alemana' AS NOMBRE_COMUNA, 'Region de Valparaiso' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 340 AS ORDEN, 'Villarrica' AS NOMBRE_COMUNA, 'Region de La Araucania' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 341 AS ORDEN, 'Vina del Mar' AS NOMBRE_COMUNA, 'Region de Valparaiso' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 342 AS ORDEN, 'Vitacura' AS NOMBRE_COMUNA, 'Region Metropolitana' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 343 AS ORDEN, 'Yerbas Buenas' AS NOMBRE_COMUNA, 'Region del Maule' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 344 AS ORDEN, 'Yumbel' AS NOMBRE_COMUNA, 'Region del Biobio' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 345 AS ORDEN, 'Yungay' AS NOMBRE_COMUNA, 'Region de Nuble' AS NOMBRE_REGION FROM DUAL
+UNION ALL
+SELECT 346 AS ORDEN, 'Zapallar' AS NOMBRE_COMUNA, 'Region de Valparaiso' AS NOMBRE_REGION FROM DUAL;
+CREATE OR REPLACE FORCE VIEW "LEHZ_VW_DOMINIOS" ("DOMINIO", "VALOR", "ETIQUETA") AS 
+  SELECT 'TIPO_SERVICIO' AS DOMINIO, 'NORMAL' AS VALOR, 'Normal' AS ETIQUETA FROM DUAL
+UNION ALL SELECT 'TIPO_SERVICIO', 'SALON CAMA', 'Salon cama' FROM DUAL
+UNION ALL SELECT 'TIPO_SERVICIO', 'CAMA', 'Cama' FROM DUAL
+UNION ALL SELECT 'METODO_PAGO', 'EFECTIVO', 'Efectivo' FROM DUAL
+UNION ALL SELECT 'METODO_PAGO', 'TARJETA', 'Tarjeta' FROM DUAL
+UNION ALL SELECT 'METODO_PAGO', 'TRANSFERENCIA', 'Transferencia' FROM DUAL
+UNION ALL SELECT 'PERMITE_BAJADA', 'S', 'Si' FROM DUAL
+UNION ALL SELECT 'PERMITE_BAJADA', 'N', 'No' FROM DUAL
+UNION ALL SELECT 'TIPO_LICENCIA', 'A1', 'A1' FROM DUAL
+UNION ALL SELECT 'TIPO_LICENCIA', 'A2', 'A2' FROM DUAL
+UNION ALL SELECT 'TIPO_LICENCIA', 'A3', 'A3' FROM DUAL
+UNION ALL SELECT 'ESTADO_USUARIO', 'ACTIVO', 'Activo' FROM DUAL
+UNION ALL SELECT 'ESTADO_USUARIO', 'INACTIVO', 'Inactivo' FROM DUAL
+UNION ALL SELECT 'UBICACION_ASIENTO', 'VENTANA', 'Ventana' FROM DUAL
+UNION ALL SELECT 'UBICACION_ASIENTO', 'PASILLO', 'Pasillo' FROM DUAL
+UNION ALL SELECT 'CANTIDAD_PISOS', '1', '1 piso' FROM DUAL
+UNION ALL SELECT 'CANTIDAD_PISOS', '2', '2 pisos' FROM DUAL;
+CREATE OR REPLACE FORCE VIEW "LEHZ_VW_HORARIOS" ("ID_HORARIO", "HORARIO", "HORA_SALIDA", "HORA_LLEGADA", "RANGO", "JORNADA") AS 
+  SELECT ID_HORARIO,
+       HORARIO,
+       TO_CHAR(HORA_SALIDA, 'YYYY-MM-DD HH24:MI') AS HORA_SALIDA,
+       TO_CHAR(HORA_LLEGADA, 'YYYY-MM-DD HH24:MI') AS HORA_LLEGADA,
+       TO_CHAR(HORA_SALIDA, 'HH24:MI') || ' - ' || TO_CHAR(HORA_LLEGADA, 'HH24:MI') AS RANGO,
+       CASE
+	   WHEN TO_NUMBER(TO_CHAR(HORA_SALIDA, 'HH24')) < 12 THEN 'MANANA'
+	   WHEN TO_NUMBER(TO_CHAR(HORA_SALIDA, 'HH24')) < 19 THEN 'TARDE'
+	   ELSE 'NOCHE'
+       END AS JORNADA
+FROM LEHZ_HORARIO;
+CREATE OR REPLACE FORCE VIEW "LEHZ_VW_ITINERARIO" ("ID_RUTA", "NOMBRE_RUTA", "ORDEN_PARADA", "ID_TERMINAL", "TERMINAL", "NOMBRE_COMUNA", "MINUTOS_DESDE_ORIG", "PERMITE_BAJADA") AS 
+  SELECT r.ID_RUTA,
+       r.NOMBRE_RUTA,
+       rp.ORDEN_PARADA,
+       rp.ID_TERMINAL,
+       t.NOMBRE AS TERMINAL,
+       c.NOMBRE_COMUNA,
+       rp.MINUTOS_DESDE_ORIG,
+       rp.PERMITE_BAJADA
+  FROM LEHZ_RUTA r
+  INNER JOIN LEHZ_RUTA_PARADA rp ON rp.ID_RUTA = r.ID_RUTA
+  INNER JOIN LEHZ_TERMINAL t ON t.ID_TERMINAL = rp.ID_TERMINAL
+  INNER JOIN LEHZ_COMUNA c ON c.ID_COMUNA = t.ID_COMUNA
+UNION ALL
+SELECT r.ID_RUTA,
+       r.NOMBRE_RUTA,
+       1 AS ORDEN_PARADA,
+       r.ID_TERMINAL_ORIGEN AS ID_TERMINAL,
+       o.NOMBRE AS TERMINAL,
+       co.NOMBRE_COMUNA,
+       0 AS MINUTOS_DESDE_ORIG,
+       'N' AS PERMITE_BAJADA
+  FROM LEHZ_RUTA r
+  INNER JOIN LEHZ_TERMINAL o ON o.ID_TERMINAL = r.ID_TERMINAL_ORIGEN
+  INNER JOIN LEHZ_COMUNA co ON co.ID_COMUNA = o.ID_COMUNA
+ WHERE NOT EXISTS (SELECT 1 FROM LEHZ_RUTA_PARADA rp WHERE rp.ID_RUTA = r.ID_RUTA)
+UNION ALL
+SELECT r.ID_RUTA,
+       r.NOMBRE_RUTA,
+       2 AS ORDEN_PARADA,
+       r.ID_TERMINAL_DESTINO AS ID_TERMINAL,
+       d.NOMBRE AS TERMINAL,
+       cd.NOMBRE_COMUNA,
+       NVL(r.HORAS_ESTIMADAS, 0) * 60 + NVL(r.MINUTOS_ESTIMADOS, 0) AS MINUTOS_DESDE_ORIG,
+       'S' AS PERMITE_BAJADA
+  FROM LEHZ_RUTA r
+  INNER JOIN LEHZ_TERMINAL d ON d.ID_TERMINAL = r.ID_TERMINAL_DESTINO
+  INNER JOIN LEHZ_COMUNA cd ON cd.ID_COMUNA = d.ID_COMUNA
+WHERE NOT EXISTS (SELECT 1 FROM LEHZ_RUTA_PARADA rp WHERE rp.ID_RUTA = r.ID_RUTA);
+CREATE OR REPLACE FORCE VIEW "LEHZ_VW_MENU_ROL" ("NOMBRE_ROL", "CODIGO", "ETIQUETA", "GRUPO", "ORDEN") AS 
+  WITH MODULOS AS (
+    SELECT 'dashboard' AS CODIGO, 'Panel' AS ETIQUETA, 'PRINCIPAL' AS GRUPO, 1 AS ORDEN,
+	   'ADMINISTRADOR,VENDEDOR,OPERACIONES' AS ROLES FROM DUAL
+    UNION ALL SELECT 'regiones', 'Regiones', 'MANTENEDORES', 10, 'ADMINISTRADOR' FROM DUAL
+    UNION ALL SELECT 'comunas', 'Comunas', 'MANTENEDORES', 11, 'ADMINISTRADOR' FROM DUAL
+    UNION ALL SELECT 'terminales', 'Terminales', 'MANTENEDORES', 12, 'ADMINISTRADOR' FROM DUAL
+    UNION ALL SELECT 'empresas', 'Empresas', 'MANTENEDORES', 13, 'ADMINISTRADOR' FROM DUAL
+    UNION ALL SELECT 'buses', 'Buses', 'MANTENEDORES', 14, 'ADMINISTRADOR,OPERACIONES' FROM DUAL
+    UNION ALL SELECT 'asientos', 'Asientos', 'MANTENEDORES', 15, 'ADMINISTRADOR,OPERACIONES' FROM DUAL
+    UNION ALL SELECT 'conductores', 'Conductores', 'MANTENEDORES', 16, 'ADMINISTRADOR,OPERACIONES' FROM DUAL
+    UNION ALL SELECT 'mecanicos', 'Mecanicos', 'MANTENEDORES', 17, 'ADMINISTRADOR,OPERACIONES' FROM DUAL
+    UNION ALL SELECT 'rutas', 'Rutas', 'MANTENEDORES', 18, 'ADMINISTRADOR,OPERACIONES' FROM DUAL
+    UNION ALL SELECT 'paradas', 'Paradas por ruta', 'MANTENEDORES', 19, 'ADMINISTRADOR,OPERACIONES' FROM DUAL
+    UNION ALL SELECT 'horarios', 'Horarios', 'MANTENEDORES', 20, 'ADMINISTRADOR,OPERACIONES' FROM DUAL
+    UNION ALL SELECT 'pasajeros', 'Pasajeros', 'MANTENEDORES', 21, 'ADMINISTRADOR,VENDEDOR' FROM DUAL
+    UNION ALL SELECT 'venta', 'Venta de boletos', 'GESTION', 30, 'ADMINISTRADOR,VENDEDOR' FROM DUAL
+    UNION ALL SELECT 'bajada', 'Registrar bajada', 'GESTION', 31, 'ADMINISTRADOR,VENDEDOR' FROM DUAL
+    UNION ALL SELECT 'viaje', 'Programar viaje', 'GESTION', 32, 'ADMINISTRADOR,OPERACIONES' FROM DUAL
+    UNION ALL SELECT 'conduce', 'Asignar conductor', 'GESTION', 33, 'ADMINISTRADOR,OPERACIONES' FROM DUAL
+    UNION ALL SELECT 'mantencion', 'Mantenciones', 'GESTION', 34, 'ADMINISTRADOR,OPERACIONES' FROM DUAL
+    UNION ALL SELECT 'utilizan', 'Terminal-empresa', 'GESTION', 35, 'ADMINISTRADOR,OPERACIONES' FROM DUAL
+    UNION ALL SELECT 'usuarios', 'Usuarios', 'SEGURIDAD', 40, 'ADMINISTRADOR' FROM DUAL
+    UNION ALL SELECT 'recaudacion', 'Recaudacion por viaje', 'REPORTES', 50, 'ADMINISTRADOR,VENDEDOR' FROM DUAL
+    UNION ALL SELECT 'rep_mantencion', 'Costos de mantencion', 'REPORTES', 51, 'ADMINISTRADOR,OPERACIONES' FROM DUAL
+    UNION ALL SELECT 'ocupacion', 'Ocupacion de asientos', 'REPORTES', 52, 'ADMINISTRADOR,VENDEDOR,OPERACIONES' FROM DUAL
+    UNION ALL SELECT 'itinerario', 'Itinerario y paradas', 'REPORTES', 53, 'ADMINISTRADOR,VENDEDOR,OPERACIONES' FROM DUAL
+)
+SELECT r.NOMBRE_ROL, m.CODIGO, m.ETIQUETA, m.GRUPO, m.ORDEN
+  FROM LEHZ_ROL r
+ CROSS JOIN MODULOS m
+WHERE ',' || m.ROLES || ',' LIKE '%,' || r.NOMBRE_ROL || ',%';
+CREATE OR REPLACE FORCE VIEW "LEHZ_VW_PARADAS_BAJADA" ("ID_VIAJE", "FECHA_VIAJE", "ID_RUTA", "NOMBRE_RUTA", "PATENTE_BUS", "ID_TERMINAL", "TERMINAL", "NOMBRE_COMUNA", "ORDEN_PARADA", "MINUTOS_DESDE_ORIG", "TARIFA") AS 
+  SELECT v.ID_VIAJE,
+       v.FECHA_VIAJE,
+       r.ID_RUTA,
+       r.NOMBRE_RUTA,
+       c.PATENTE_BUS,
+       rp.ID_TERMINAL,
+       t.NOMBRE AS TERMINAL,
+       co.NOMBRE_COMUNA,
+       rp.ORDEN_PARADA,
+       rp.MINUTOS_DESDE_ORIG,
+       LEHZ_FN_CALCULAR_TARIFA_BUS(v.ID_VIAJE, c.PATENTE_BUS, rp.ID_TERMINAL) AS TARIFA
+  FROM LEHZ_VIAJE v
+  INNER JOIN LEHZ_RUTA r ON r.ID_RUTA = v.ID_RUTA
+  INNER JOIN LEHZ_CONDUCE c ON c.ID_VIAJE = v.ID_VIAJE
+  INNER JOIN LEHZ_RUTA_PARADA rp ON rp.ID_RUTA = r.ID_RUTA
+  INNER JOIN LEHZ_TERMINAL t ON t.ID_TERMINAL = rp.ID_TERMINAL
+  INNER JOIN LEHZ_COMUNA co ON co.ID_COMUNA = t.ID_COMUNA
+ WHERE rp.PERMITE_BAJADA = 'S'
+AND rp.ORDEN_PARADA > 1;
+CREATE OR REPLACE FORCE VIEW "LEHZ_VW_REGIONES_CHILE" ("ORDEN", "NOMBRE_REGION") AS 
+  SELECT c.ORDEN, c.NOMBRE_REGION
+FROM (
+    SELECT 1 AS ORDEN, 'Region de Arica y Parinacota' AS NOMBRE_REGION FROM DUAL UNION ALL
+    SELECT 2, 'Region de Tarapaca' FROM DUAL UNION ALL
+    SELECT 3, 'Region de Antofagasta' FROM DUAL UNION ALL
+    SELECT 4, 'Region de Atacama' FROM DUAL UNION ALL
+    SELECT 5, 'Region de Coquimbo' FROM DUAL UNION ALL
+    SELECT 6, 'Region de Valparaiso' FROM DUAL UNION ALL
+    SELECT 7, 'Region Metropolitana' FROM DUAL UNION ALL
+    SELECT 8, 'Region del Libertador General Bernardo OHiggins' FROM DUAL UNION ALL
+    SELECT 9, 'Region del Maule' FROM DUAL UNION ALL
+    SELECT 10, 'Region de Nuble' FROM DUAL UNION ALL
+    SELECT 11, 'Region del Biobio' FROM DUAL UNION ALL
+    SELECT 12, 'Region de La Araucania' FROM DUAL UNION ALL
+    SELECT 13, 'Region de Los Rios' FROM DUAL UNION ALL
+    SELECT 14, 'Region de Los Lagos' FROM DUAL UNION ALL
+    SELECT 15, 'Region de Aysen del General Carlos Ibanez del Campo' FROM DUAL UNION ALL
+    SELECT 16, 'Region de Magallanes y de la Antartica Chilena' FROM DUAL
+) c
+WHERE NOT EXISTS (
+    SELECT 1 FROM LEHZ_REGION r WHERE UPPER(r.NOMBRE_REGION) = UPPER(c.NOMBRE_REGION)
+);
+CREATE OR REPLACE FORCE VIEW "LEHZ_VW_RESUMEN" ("TOTAL_EMPRESAS", "TOTAL_BUSES", "TOTAL_VIAJES", "TOTAL_PASAJEROS", "BOLETOS_EMITIDOS", "BOLETOS_ANULADOS", "RECAUDACION_ACTIVA") AS 
+  SELECT (SELECT COUNT(*) FROM LEHZ_EMPRESA) AS TOTAL_EMPRESAS,
+       (SELECT COUNT(*) FROM LEHZ_BUS) AS TOTAL_BUSES,
+       (SELECT COUNT(*) FROM LEHZ_VIAJE) AS TOTAL_VIAJES,
+       (SELECT COUNT(*) FROM LEHZ_PASAJERO) AS TOTAL_PASAJEROS,
+       (SELECT COUNT(*) FROM LEHZ_BOLETO WHERE ESTADO = 'EMITIDO') AS BOLETOS_EMITIDOS,
+       (SELECT COUNT(*) FROM LEHZ_BOLETO WHERE ESTADO = 'ANULADO') AS BOLETOS_ANULADOS,
+       (SELECT NVL(SUM(p.MONTO_PAGO), 0)
+	  FROM LEHZ_PAGO p
+	  INNER JOIN LEHZ_BOLETO b ON b.ID_BOLETO = p.ID_BOLETO
+	 WHERE b.ESTADO <> 'ANULADO') AS RECAUDACION_ACTIVA
+FROM DUAL;
+CREATE OR REPLACE FORCE VIEW "LEHZ_VW_RUTAS_DETALLE" ("ID_RUTA", "NOMBRE_RUTA", "DISTANCIA", "HORAS_ESTIMADAS", "MINUTOS_ESTIMADOS", "TERMINAL_ORIGEN", "COMUNA_ORIGEN", "TERMINAL_DESTINO", "COMUNA_DESTINO", "TOTAL_PARADAS", "TOTAL_TERMINALES", "RECORRIDO") AS 
+  SELECT r.ID_RUTA,
+       r.NOMBRE_RUTA,
+       r.DISTANCIA,
+       r.HORAS_ESTIMADAS,
+       r.MINUTOS_ESTIMADOS,
+       o.NOMBRE AS TERMINAL_ORIGEN,
+       co.NOMBRE_COMUNA AS COMUNA_ORIGEN,
+       d.NOMBRE AS TERMINAL_DESTINO,
+       cd.NOMBRE_COMUNA AS COMUNA_DESTINO,
+       (SELECT COUNT(*) FROM LEHZ_RUTA_PARADA rp WHERE rp.ID_RUTA = r.ID_RUTA) AS TOTAL_PARADAS,
+       (SELECT COUNT(DISTINCT t.ID_TERMINAL)
+	  FROM LEHZ_RUTA_PARADA rp
+	  INNER JOIN LEHZ_TERMINAL t ON t.ID_TERMINAL = rp.ID_TERMINAL
+	 WHERE rp.ID_RUTA = r.ID_RUTA) AS TOTAL_TERMINALES,
+       (SELECT LISTAGG(i.TERMINAL, ' -> ') WITHIN GROUP (ORDER BY i.ORDEN_PARADA)
+	  FROM LEHZ_VW_ITINERARIO i
+	 WHERE i.ID_RUTA = r.ID_RUTA) AS RECORRIDO
+  FROM LEHZ_RUTA r
+  INNER JOIN LEHZ_TERMINAL o ON o.ID_TERMINAL = r.ID_TERMINAL_ORIGEN
+  INNER JOIN LEHZ_COMUNA co ON co.ID_COMUNA = o.ID_COMUNA
+  INNER JOIN LEHZ_TERMINAL d ON d.ID_TERMINAL = r.ID_TERMINAL_DESTINO
+INNER JOIN LEHZ_COMUNA cd ON cd.ID_COMUNA = d.ID_COMUNA;
+CREATE OR REPLACE FORCE VIEW "LEHZ_VW_VIAJES_DETALLE" ("ID_VIAJE", "FECHA_VIAJE", "FECHA_VIAJE_TEXTO", "ID_HORARIO", "HORA_SALIDA", "HORA_LLEGADA", "ID_RUTA", "NOMBRE_RUTA", "TERMINAL_ORIGEN", "TERMINAL_DESTINO", "DISTANCIA", "BUSES", "CAPACIDAD_TOTAL", "BOLETOS_ACTIVOS") AS 
+  SELECT v.ID_VIAJE,
+       v.FECHA_VIAJE,
+       TO_CHAR(v.FECHA_VIAJE, 'DD/MM/YYYY') AS FECHA_VIAJE_TEXTO,
+       h.ID_HORARIO,
+       TO_CHAR(h.HORA_SALIDA, 'HH24:MI') AS HORA_SALIDA,
+       TO_CHAR(h.HORA_LLEGADA, 'HH24:MI') AS HORA_LLEGADA,
+       r.ID_RUTA,
+       r.NOMBRE_RUTA,
+       o.NOMBRE AS TERMINAL_ORIGEN,
+       d.NOMBRE AS TERMINAL_DESTINO,
+       r.DISTANCIA,
+       (SELECT LISTAGG(c.PATENTE_BUS, ', ') WITHIN GROUP (ORDER BY c.PATENTE_BUS)
+	  FROM (SELECT DISTINCT c2.PATENTE_BUS
+		  FROM LEHZ_CONDUCE c2
+		 WHERE c2.ID_VIAJE = v.ID_VIAJE) c) AS BUSES,
+       (SELECT NVL(SUM(b.CAPACIDAD), 0)
+	  FROM (SELECT DISTINCT c3.PATENTE_BUS
+		  FROM LEHZ_CONDUCE c3
+		 WHERE c3.ID_VIAJE = v.ID_VIAJE) x
+	  INNER JOIN LEHZ_BUS b ON b.PATENTE_BUS = x.PATENTE_BUS) AS CAPACIDAD_TOTAL,
+       (SELECT COUNT(*)
+	  FROM LEHZ_BOLETO b
+	 WHERE b.ID_VIAJE = v.ID_VIAJE
+	   AND b.ESTADO IN ('EMITIDO', 'USADO')) AS BOLETOS_ACTIVOS
+  FROM LEHZ_VIAJE v
+  INNER JOIN LEHZ_HORARIO h ON h.ID_HORARIO = v.ID_HORARIO
+  INNER JOIN LEHZ_RUTA r ON r.ID_RUTA = v.ID_RUTA
+  INNER JOIN LEHZ_TERMINAL o ON o.ID_TERMINAL = r.ID_TERMINAL_ORIGEN
+INNER JOIN LEHZ_TERMINAL d ON d.ID_TERMINAL = r.ID_TERMINAL_DESTINO;
+CREATE OR REPLACE FORCE VIEW "LEHZ_VW_VIAJE_BUSES" ("ID_VIAJE", "FECHA_VIAJE", "FECHA_VIAJE_TEXTO", "ID_RUTA", "NOMBRE_RUTA", "ID_HORARIO", "HORA_SALIDA", "HORA_LLEGADA", "PATENTE_BUS", "MARCA", "MODELO", "CAPACIDAD", "TIPO_SERVICIO", "TARIFA_BASE", "CONDUCTORES") AS 
+  SELECT v.ID_VIAJE,
+       v.FECHA_VIAJE,
+       TO_CHAR(v.FECHA_VIAJE, 'DD/MM/YYYY') AS FECHA_VIAJE_TEXTO,
+       r.ID_RUTA,
+       r.NOMBRE_RUTA,
+       h.ID_HORARIO,
+       TO_CHAR(h.HORA_SALIDA, 'HH24:MI') AS HORA_SALIDA,
+       TO_CHAR(h.HORA_LLEGADA, 'HH24:MI') AS HORA_LLEGADA,
+       c.PATENTE_BUS,
+       b.MARCA,
+       b.MODELO,
+       b.CAPACIDAD,
+       b.TIPO_SERVICIO,
+       b.TARIFA_BASE,
+       LISTAGG(co.NOMBRE_CONDUCTOR || ' ' || co.APELLIDO1_CONDUCTOR, ', ')
+	   WITHIN GROUP (ORDER BY co.APELLIDO1_CONDUCTOR, co.NOMBRE_CONDUCTOR) AS CONDUCTORES
+  FROM LEHZ_VIAJE v
+  INNER JOIN LEHZ_RUTA r ON r.ID_RUTA = v.ID_RUTA
+  INNER JOIN LEHZ_HORARIO h ON h.ID_HORARIO = v.ID_HORARIO
+  INNER JOIN LEHZ_CONDUCE c ON c.ID_VIAJE = v.ID_VIAJE
+  INNER JOIN LEHZ_BUS b ON b.PATENTE_BUS = c.PATENTE_BUS
+  INNER JOIN LEHZ_CONDUCTOR co ON co.RUT_CONDUCTOR = c.RUT_CONDUCTOR
+ GROUP BY v.ID_VIAJE, v.FECHA_VIAJE, r.ID_RUTA, r.NOMBRE_RUTA,
+	  h.ID_HORARIO, h.HORA_SALIDA, h.HORA_LLEGADA,
+	  c.PATENTE_BUS, b.MARCA, b.MODELO, b.CAPACIDAD,
+b.TIPO_SERVICIO, b.TARIFA_BASE;
+CREATE OR REPLACE TRIGGER "LEHZ_TRG_ASIENTO_VALIDA" 
+BEFORE INSERT OR UPDATE ON LEHZ_ASIENTO
+FOR EACH ROW
+DECLARE
+    v_capacidad NUMBER;
+    v_pisos	NUMBER;
+    v_ubicacion VARCHAR2(10);
+BEGIN
+    SELECT CAPACIDAD, CANTIDAD_PISOS
+      INTO v_capacidad, v_pisos
+      FROM LEHZ_BUS
+     WHERE PATENTE_BUS = :NEW.PATENTE_BUS;
+
+    IF v_capacidad IS NULL THEN
+	RAISE_APPLICATION_ERROR(-20202, 'El bus no tiene capacidad declarada.');
+    END IF;
+
+    IF :NEW.NUMERO_ASIENTO < 1 OR :NEW.NUMERO_ASIENTO > v_capacidad THEN
+	RAISE_APPLICATION_ERROR(-20202, 'Asiento invalido: el bus tiene capacidad para ' || v_capacidad || ' asientos.');
+    END IF;
+
+    IF :NEW.PISO > v_pisos THEN
+	RAISE_APPLICATION_ERROR(-20202, 'Piso invalido: el bus tiene ' || v_pisos || ' piso(s).');
+    END IF;
+
+    -- Distribucion 2+2: 1 y 4 son ventana; 2 y 3 son pasillo.
+    v_ubicacion := CASE MOD(:NEW.NUMERO_ASIENTO - 1, 4)
+			WHEN 0 THEN 'VENTANA'
+			WHEN 3 THEN 'VENTANA'
+			ELSE 'PASILLO'
+		   END;
+
+    IF :NEW.UBICACION IS NOT NULL AND UPPER(TRIM(:NEW.UBICACION)) <> v_ubicacion THEN
+	RAISE_APPLICATION_ERROR(-20202, 'Ubicacion invalida para el asiento ' || :NEW.NUMERO_ASIENTO || ': debe ser ' || v_ubicacion || ' segun la distribucion 2+2.');
+    END IF;
+
+    :NEW.UBICACION := v_ubicacion;
+END;
+ALTER TRIGGER "LEHZ_TRG_ASIENTO_VALIDA" ENABLE;
+/
+CREATE OR REPLACE TRIGGER "LEHZ_TRG_AUDITORIA_BUSES" 
+AFTER INSERT OR UPDATE OR DELETE
+ON LEHZ_BUS
+FOR EACH ROW
+DECLARE
+    v_operacion VARCHAR2(15);
+    v_detalle	VARCHAR2(500);
+BEGIN
+    IF INSERTING THEN
+	v_operacion := 'INSERT';
+	v_detalle   := 'Se registro un nuevo bus con patente: ' || :NEW.PATENTE_BUS || ', Marca: ' || :NEW.MARCA;
+    ELSIF UPDATING THEN
+	v_operacion := 'UPDATE';
+	v_detalle   := 'Se actualizo el bus patente: ' || :OLD.PATENTE_BUS || ' (Modelo anterior: ' || :OLD.MODELO || ' -> Nuevo modelo: ' || :NEW.MODELO || ')';
+    ELSIF DELETING THEN
+	v_operacion := 'DELETE';
+	v_detalle   := 'Se elimino el bus con patente: ' || :OLD.PATENTE_BUS;
+    END IF;
+
+    -- Inserta en la bitacora de auditoria usando la secuencia
+    INSERT INTO LEHZ_AUDITORIA (
+	ID_AUDITORIA, TABLA_AFECTADA, OPERACION, ID_REGISTRO, DETALLE, USUARIO_BD, FECHA_EVENTO
+    ) VALUES (
+	LEHZ_SEQ_AUDITORIA.NEXTVAL,
+	'LEHZ_BUS',
+	v_operacion,
+	COALESCE(:NEW.PATENTE_BUS, :OLD.PATENTE_BUS),
+	v_detalle,
+	USER,
+	SYSTIMESTAMP
+    );
+END;
+ALTER TRIGGER "LEHZ_TRG_AUDITORIA_BUSES" ENABLE;
+/
+CREATE OR REPLACE TRIGGER "LEHZ_TRG_AUDITORIA_MANTENCIONES" 
+AFTER INSERT OR UPDATE OR DELETE
+ON LEHZ_MANTENCION
+FOR EACH ROW
+DECLARE
+    v_operacion VARCHAR2(15);
+    v_detalle	VARCHAR2(500);
+BEGIN
+    IF INSERTING THEN
+	v_operacion := 'INSERT';
+	v_detalle   := 'Se registro mantencion ID: ' || :NEW.ID_MANTENCION || ' para el bus: ' || :NEW.PATENTE_BUS || ' con costo: ' || :NEW.COSTO_MANTENCION;
+    ELSIF UPDATING THEN
+	v_operacion := 'UPDATE';
+	v_detalle   := 'Se modifico la mantencion ID: ' || :OLD.ID_MANTENCION || ' (Costo anterior: ' || :OLD.COSTO_MANTENCION || ' -> Nuevo costo: ' || :NEW.COSTO_MANTENCION || ')';
+    ELSIF DELETING THEN
+	v_operacion := 'DELETE';
+	v_detalle   := 'Se elimino el registro de mantencion ID: ' || :OLD.ID_MANTENCION;
+    END IF;
+
+    INSERT INTO LEHZ_AUDITORIA (
+	ID_AUDITORIA, TABLA_AFECTADA, OPERACION, ID_REGISTRO, DETALLE, USUARIO_BD, FECHA_EVENTO
+    ) VALUES (
+	LEHZ_SEQ_AUDITORIA.NEXTVAL,
+	'LEHZ_MANTENCION',
+	v_operacion,
+	TO_CHAR(COALESCE(:NEW.ID_MANTENCION, :OLD.ID_MANTENCION)),
+	v_detalle,
+	USER,
+	SYSTIMESTAMP
+    );
+END;
+ALTER TRIGGER "LEHZ_TRG_AUDITORIA_MANTENCIONES" ENABLE;
+/
+CREATE OR REPLACE TRIGGER "LEHZ_TRG_AUD_ASIENTO" 
+AFTER INSERT OR UPDATE OR DELETE ON LEHZ_ASIENTO
+FOR EACH ROW
+BEGIN
+    LEHZ_PKG_AUDITORIA.REGISTRAR('LEHZ_ASIENTO',
+	CASE WHEN INSERTING THEN 'INSERT' WHEN UPDATING THEN 'UPDATE' ELSE 'DELETE' END,
+	COALESCE(:NEW.PATENTE_BUS, :OLD.PATENTE_BUS) || '-' || TO_CHAR(COALESCE(:NEW.NUMERO_ASIENTO, :OLD.NUMERO_ASIENTO)),
+	'Asiento ' || COALESCE(:NEW.NUMERO_ASIENTO, :OLD.NUMERO_ASIENTO) || ' del bus ' || COALESCE(:NEW.PATENTE_BUS, :OLD.PATENTE_BUS));
+END;
+ALTER TRIGGER "LEHZ_TRG_AUD_ASIENTO" ENABLE;
+/
+CREATE OR REPLACE TRIGGER "LEHZ_TRG_AUD_BOLETO" 
+AFTER INSERT OR UPDATE OR DELETE ON LEHZ_BOLETO
+FOR EACH ROW
+BEGIN
+    LEHZ_PKG_AUDITORIA.REGISTRAR('LEHZ_BOLETO',
+	CASE WHEN INSERTING THEN 'INSERT' WHEN UPDATING THEN 'UPDATE' ELSE 'DELETE' END,
+	TO_CHAR(COALESCE(:NEW.ID_BOLETO, :OLD.ID_BOLETO)),
+	'Boleto ' || COALESCE(:NEW.ID_BOLETO, :OLD.ID_BOLETO) || ' | Estado: ' || COALESCE(:NEW.ESTADO, :OLD.ESTADO) || ' | Viaje: ' || COALESCE(:NEW.ID_VIAJE, :OLD.ID_VIAJE) || ' | Asiento: ' || COALESCE(:NEW.NUMERO_ASIENTO, :OLD.NUMERO_ASIENTO) || ' | Valor: ' || COALESCE(:NEW.VALOR_BOLETO, :OLD.VALOR_BOLETO));
+END;
+ALTER TRIGGER "LEHZ_TRG_AUD_BOLETO" ENABLE;
+/
+CREATE OR REPLACE TRIGGER "LEHZ_TRG_AUD_COMUNA" 
+AFTER INSERT OR UPDATE OR DELETE ON LEHZ_COMUNA
+FOR EACH ROW
+BEGIN
+    LEHZ_PKG_AUDITORIA.REGISTRAR('LEHZ_COMUNA',
+	CASE WHEN INSERTING THEN 'INSERT' WHEN UPDATING THEN 'UPDATE' ELSE 'DELETE' END,
+	TO_CHAR(COALESCE(:NEW.ID_COMUNA, :OLD.ID_COMUNA)),
+	'Comuna: ' || COALESCE(:NEW.NOMBRE_COMUNA, :OLD.NOMBRE_COMUNA));
+END;
+ALTER TRIGGER "LEHZ_TRG_AUD_COMUNA" ENABLE;
+/
+CREATE OR REPLACE TRIGGER "LEHZ_TRG_AUD_CONDUCE" 
+AFTER INSERT OR UPDATE OR DELETE ON LEHZ_CONDUCE
+FOR EACH ROW
+BEGIN
+    LEHZ_PKG_AUDITORIA.REGISTRAR('LEHZ_CONDUCE',
+	CASE WHEN INSERTING THEN 'INSERT' WHEN UPDATING THEN 'UPDATE' ELSE 'DELETE' END,
+	COALESCE(:NEW.RUT_CONDUCTOR, :OLD.RUT_CONDUCTOR) || '|' || COALESCE(:NEW.PATENTE_BUS, :OLD.PATENTE_BUS) || '|' || COALESCE(:NEW.ID_VIAJE, :OLD.ID_VIAJE),
+	'Asignacion conductor/bus/viaje');
+END;
+ALTER TRIGGER "LEHZ_TRG_AUD_CONDUCE" ENABLE;
+/
+CREATE OR REPLACE TRIGGER "LEHZ_TRG_AUD_CONDUCTOR" 
+AFTER INSERT OR UPDATE OR DELETE ON LEHZ_CONDUCTOR
+FOR EACH ROW
+BEGIN
+    LEHZ_PKG_AUDITORIA.REGISTRAR('LEHZ_CONDUCTOR',
+	CASE WHEN INSERTING THEN 'INSERT' WHEN UPDATING THEN 'UPDATE' ELSE 'DELETE' END,
+	COALESCE(:NEW.RUT_CONDUCTOR, :OLD.RUT_CONDUCTOR),
+	'Conductor: ' || COALESCE(:NEW.NOMBRE_CONDUCTOR || ' ' || :NEW.APELLIDO1_CONDUCTOR, :OLD.NOMBRE_CONDUCTOR || ' ' || :OLD.APELLIDO1_CONDUCTOR));
+END;
+ALTER TRIGGER "LEHZ_TRG_AUD_CONDUCTOR" ENABLE;
+/
+CREATE OR REPLACE TRIGGER "LEHZ_TRG_AUD_EMPRESA" 
+AFTER INSERT OR UPDATE OR DELETE ON LEHZ_EMPRESA
+FOR EACH ROW
+BEGIN
+    LEHZ_PKG_AUDITORIA.REGISTRAR('LEHZ_EMPRESA',
+	CASE WHEN INSERTING THEN 'INSERT' WHEN UPDATING THEN 'UPDATE' ELSE 'DELETE' END,
+	COALESCE(:NEW.RUT_EMPRESA, :OLD.RUT_EMPRESA),
+	'Empresa: ' || COALESCE(:NEW.RAZON_SOCIAL, :OLD.RAZON_SOCIAL));
+END;
+ALTER TRIGGER "LEHZ_TRG_AUD_EMPRESA" ENABLE;
+/
+CREATE OR REPLACE TRIGGER "LEHZ_TRG_AUD_HORARIO" 
+AFTER INSERT OR UPDATE OR DELETE ON LEHZ_HORARIO
+FOR EACH ROW
+BEGIN
+    LEHZ_PKG_AUDITORIA.REGISTRAR('LEHZ_HORARIO',
+	CASE WHEN INSERTING THEN 'INSERT' WHEN UPDATING THEN 'UPDATE' ELSE 'DELETE' END,
+	TO_CHAR(COALESCE(:NEW.ID_HORARIO, :OLD.ID_HORARIO)),
+	'Horario: ' || COALESCE(TO_CHAR(:NEW.HORARIO), TO_CHAR(:OLD.HORARIO)));
+END;
+ALTER TRIGGER "LEHZ_TRG_AUD_HORARIO" ENABLE;
+/
+CREATE OR REPLACE TRIGGER "LEHZ_TRG_AUD_MECANICO" 
+AFTER INSERT OR UPDATE OR DELETE ON LEHZ_MECANICO
+FOR EACH ROW
+BEGIN
+    LEHZ_PKG_AUDITORIA.REGISTRAR('LEHZ_MECANICO',
+	CASE WHEN INSERTING THEN 'INSERT' WHEN UPDATING THEN 'UPDATE' ELSE 'DELETE' END,
+	COALESCE(:NEW.RUT_MECANICO, :OLD.RUT_MECANICO),
+	'Mecanico: ' || COALESCE(:NEW.NOMBRE_MECANICO || ' ' || :NEW.APELLIDO1_MECANICO, :OLD.NOMBRE_MECANICO || ' ' || :OLD.APELLIDO1_MECANICO));
+END;
+ALTER TRIGGER "LEHZ_TRG_AUD_MECANICO" ENABLE;
+/
+CREATE OR REPLACE TRIGGER "LEHZ_TRG_AUD_PAGO" 
+AFTER INSERT OR UPDATE OR DELETE ON LEHZ_PAGO
+FOR EACH ROW
+BEGIN
+    LEHZ_PKG_AUDITORIA.REGISTRAR('LEHZ_PAGO',
+	CASE WHEN INSERTING THEN 'INSERT' WHEN UPDATING THEN 'UPDATE' ELSE 'DELETE' END,
+	TO_CHAR(COALESCE(:NEW.ID_PAGO, :OLD.ID_PAGO)),
+	'Pago ' || COALESCE(:NEW.ID_PAGO, :OLD.ID_PAGO) || ' | Monto: ' || COALESCE(:NEW.MONTO_PAGO, :OLD.MONTO_PAGO) || ' | Metodo: ' || COALESCE(:NEW.METODO_PAGO, :OLD.METODO_PAGO));
+END;
+ALTER TRIGGER "LEHZ_TRG_AUD_PAGO" ENABLE;
+/
+CREATE OR REPLACE TRIGGER "LEHZ_TRG_AUD_PASAJERO" 
+AFTER INSERT OR UPDATE OR DELETE ON LEHZ_PASAJERO
+FOR EACH ROW
+BEGIN
+    LEHZ_PKG_AUDITORIA.REGISTRAR('LEHZ_PASAJERO',
+	CASE WHEN INSERTING THEN 'INSERT' WHEN UPDATING THEN 'UPDATE' ELSE 'DELETE' END,
+	COALESCE(:NEW.RUT_PASAJERO, :OLD.RUT_PASAJERO),
+	'Pasajero: ' || COALESCE(:NEW.NOMBRE_PASAJERO || ' ' || :NEW.APELLIDO1_PASAJERO, :OLD.NOMBRE_PASAJERO || ' ' || :OLD.APELLIDO1_PASAJERO));
+END;
+ALTER TRIGGER "LEHZ_TRG_AUD_PASAJERO" ENABLE;
+/
+CREATE OR REPLACE TRIGGER "LEHZ_TRG_AUD_PASAJE_BAJADA" 
+AFTER INSERT OR UPDATE OR DELETE ON LEHZ_PASAJE_BAJADA
+FOR EACH ROW
+BEGIN
+    LEHZ_PKG_AUDITORIA.REGISTRAR('LEHZ_PASAJE_BAJADA',
+	CASE WHEN INSERTING THEN 'INSERT' WHEN UPDATING THEN 'UPDATE' ELSE 'DELETE' END,
+	TO_CHAR(COALESCE(:NEW.ID_BAJADA, :OLD.ID_BAJADA)),
+	'Bajada del boleto ' || COALESCE(:NEW.ID_BOLETO, :OLD.ID_BOLETO) || ' en terminal ' || COALESCE(:NEW.ID_TERMINAL_BAJADA, :OLD.ID_TERMINAL_BAJADA));
+END;
+ALTER TRIGGER "LEHZ_TRG_AUD_PASAJE_BAJADA" ENABLE;
+/
+CREATE OR REPLACE TRIGGER "LEHZ_TRG_AUD_REGION" 
+AFTER INSERT OR UPDATE OR DELETE ON LEHZ_REGION
+FOR EACH ROW
+BEGIN
+    LEHZ_PKG_AUDITORIA.REGISTRAR('LEHZ_REGION',
+	CASE WHEN INSERTING THEN 'INSERT' WHEN UPDATING THEN 'UPDATE' ELSE 'DELETE' END,
+	TO_CHAR(COALESCE(:NEW.ID_REGION, :OLD.ID_REGION)),
+	'Region: ' || COALESCE(:NEW.NOMBRE_REGION, :OLD.NOMBRE_REGION));
+END;
+ALTER TRIGGER "LEHZ_TRG_AUD_REGION" ENABLE;
+/
+CREATE OR REPLACE TRIGGER "LEHZ_TRG_AUD_RUTA" 
+AFTER INSERT OR UPDATE OR DELETE ON LEHZ_RUTA
+FOR EACH ROW
+BEGIN
+    LEHZ_PKG_AUDITORIA.REGISTRAR('LEHZ_RUTA',
+	CASE WHEN INSERTING THEN 'INSERT' WHEN UPDATING THEN 'UPDATE' ELSE 'DELETE' END,
+	TO_CHAR(COALESCE(:NEW.ID_RUTA, :OLD.ID_RUTA)),
+	'Ruta: ' || COALESCE(:NEW.NOMBRE_RUTA, :OLD.NOMBRE_RUTA));
+END;
+ALTER TRIGGER "LEHZ_TRG_AUD_RUTA" ENABLE;
+/
+CREATE OR REPLACE TRIGGER "LEHZ_TRG_AUD_RUTA_PARADA" 
+AFTER INSERT OR UPDATE OR DELETE ON LEHZ_RUTA_PARADA
+FOR EACH ROW
+BEGIN
+    LEHZ_PKG_AUDITORIA.REGISTRAR('LEHZ_RUTA_PARADA',
+	CASE WHEN INSERTING THEN 'INSERT' WHEN UPDATING THEN 'UPDATE' ELSE 'DELETE' END,
+	TO_CHAR(COALESCE(:NEW.ID_RUTA_PARADA, :OLD.ID_RUTA_PARADA)),
+	'Parada de ruta: ' || COALESCE(:NEW.ID_RUTA, :OLD.ID_RUTA) || ' orden ' || COALESCE(:NEW.ORDEN_PARADA, :OLD.ORDEN_PARADA));
+END;
+ALTER TRIGGER "LEHZ_TRG_AUD_RUTA_PARADA" ENABLE;
+/
+CREATE OR REPLACE TRIGGER "LEHZ_TRG_AUD_TERMINAL" 
+AFTER INSERT OR UPDATE OR DELETE ON LEHZ_TERMINAL
+FOR EACH ROW
+BEGIN
+    LEHZ_PKG_AUDITORIA.REGISTRAR('LEHZ_TERMINAL',
+	CASE WHEN INSERTING THEN 'INSERT' WHEN UPDATING THEN 'UPDATE' ELSE 'DELETE' END,
+	TO_CHAR(COALESCE(:NEW.ID_TERMINAL, :OLD.ID_TERMINAL)),
+	'Terminal: ' || COALESCE(:NEW.NOMBRE, :OLD.NOMBRE));
+END;
+ALTER TRIGGER "LEHZ_TRG_AUD_TERMINAL" ENABLE;
+/
+CREATE OR REPLACE TRIGGER "LEHZ_TRG_AUD_USUARIO" 
+AFTER INSERT OR UPDATE OR DELETE ON LEHZ_USUARIO
+FOR EACH ROW
+BEGIN
+    LEHZ_PKG_AUDITORIA.REGISTRAR('LEHZ_USUARIO',
+	CASE WHEN INSERTING THEN 'INSERT' WHEN UPDATING THEN 'UPDATE' ELSE 'DELETE' END,
+	TO_CHAR(COALESCE(:NEW.ID_USUARIO, :OLD.ID_USUARIO)),
+	'Usuario: ' || COALESCE(:NEW.USERNAME, :OLD.USERNAME) || ' | Estado: ' || COALESCE(:NEW.ESTADO, :OLD.ESTADO));
+END;
+ALTER TRIGGER "LEHZ_TRG_AUD_USUARIO" ENABLE;
+/
+CREATE OR REPLACE TRIGGER "LEHZ_TRG_AUD_UTILIZAN" 
+AFTER INSERT OR UPDATE OR DELETE ON LEHZ_UTILIZAN
+FOR EACH ROW
+BEGIN
+    LEHZ_PKG_AUDITORIA.REGISTRAR('LEHZ_UTILIZAN',
+	CASE WHEN INSERTING THEN 'INSERT' WHEN UPDATING THEN 'UPDATE' ELSE 'DELETE' END,
+	COALESCE(:NEW.RUT_EMPRESA, :OLD.RUT_EMPRESA) || '|' || COALESCE(:NEW.ID_TERMINAL, :OLD.ID_TERMINAL),
+	'Asociacion terminal/empresa');
+END;
+ALTER TRIGGER "LEHZ_TRG_AUD_UTILIZAN" ENABLE;
+/
+CREATE OR REPLACE TRIGGER "LEHZ_TRG_BOLETO_ESTADO" 
+BEFORE UPDATE OF ESTADO ON LEHZ_BOLETO
+FOR EACH ROW
+BEGIN
+    IF :OLD.ESTADO = 'ANULADO' AND :NEW.ESTADO <> 'ANULADO' THEN
+	RAISE_APPLICATION_ERROR(-20206, 'Un boleto anulado no puede volver a quedar activo. Genere una nueva venta.');
+    END IF;
+    IF :OLD.ESTADO = 'USADO' AND :NEW.ESTADO = 'EMITIDO' THEN
+	RAISE_APPLICATION_ERROR(-20206, 'Un boleto usado no puede volver al estado emitido.');
+    END IF;
+    IF :NEW.ESTADO = 'ANULADO' AND (:NEW.FECHA_ANULACION IS NULL OR :NEW.MOTIVO_ANULACION IS NULL) THEN
+	RAISE_APPLICATION_ERROR(-20206, 'Para anular un boleto debe registrar la fecha y el motivo de anulacion.');
+    END IF;
+END;
+ALTER TRIGGER "LEHZ_TRG_BOLETO_ESTADO" ENABLE;
+/
+CREATE OR REPLACE TRIGGER "LEHZ_TRG_BOLETO_VALIDA" 
+BEFORE INSERT OR UPDATE OF ID_VIAJE, PATENTE_BUS, NUMERO_ASIENTO ON LEHZ_BOLETO
+FOR EACH ROW
+DECLARE
+    v_capacidad   NUMBER;
+    v_count	  NUMBER := 0;
+    v_asignado	  NUMBER := 0;
+    v_fecha_viaje DATE;
+BEGIN
+    IF :NEW.ESTADO = 'ANULADO' THEN
+	RETURN;
+    END IF;
+
+    SELECT COUNT(*)
+      INTO v_asignado
+      FROM LEHZ_CONDUCE
+     WHERE ID_VIAJE = :NEW.ID_VIAJE
+       AND PATENTE_BUS = :NEW.PATENTE_BUS;
+
+    IF v_asignado = 0 THEN
+	RAISE_APPLICATION_ERROR(-20205, 'No se puede vender el boleto: el bus no esta asignado al viaje.');
+    END IF;
+
+    SELECT FECHA_VIAJE
+      INTO v_fecha_viaje
+      FROM LEHZ_VIAJE
+     WHERE ID_VIAJE = :NEW.ID_VIAJE;
+
+    IF TRUNC(v_fecha_viaje) < TRUNC(SYSDATE) THEN
+	RAISE_APPLICATION_ERROR(-20205, 'No se puede vender un boleto para un viaje cuya fecha ya paso.');
+    END IF;
+
+    SELECT CAPACIDAD
+      INTO v_capacidad
+      FROM LEHZ_BUS
+     WHERE PATENTE_BUS = :NEW.PATENTE_BUS;
+
+    SELECT COUNT(*)
+      INTO v_count
+      FROM LEHZ_BOLETO
+     WHERE ID_VIAJE = :NEW.ID_VIAJE
+       AND PATENTE_BUS = :NEW.PATENTE_BUS
+       AND ESTADO IN ('EMITIDO', 'USADO')
+       AND ID_BOLETO <> NVL(:NEW.ID_BOLETO, -1);
+
+    IF v_count >= NVL(v_capacidad, 0) THEN
+	RAISE_APPLICATION_ERROR(-20205, 'No se puede vender el boleto: se alcanzo la capacidad maxima del bus (' || v_capacidad || ' asientos).');
+    END IF;
+
+    SELECT COUNT(*)
+      INTO v_count
+      FROM LEHZ_BOLETO
+     WHERE ID_VIAJE = :NEW.ID_VIAJE
+       AND PATENTE_BUS = :NEW.PATENTE_BUS
+       AND NUMERO_ASIENTO = :NEW.NUMERO_ASIENTO
+       AND ESTADO IN ('EMITIDO', 'USADO')
+       AND ID_BOLETO <> NVL(:NEW.ID_BOLETO, -1);
+
+    IF v_count > 0 THEN
+	RAISE_APPLICATION_ERROR(-20205, 'El asiento ' || :NEW.NUMERO_ASIENTO || ' ya esta ocupado para este viaje y bus.');
+    END IF;
+END;
+ALTER TRIGGER "LEHZ_TRG_BOLETO_VALIDA" ENABLE;
+/
+CREATE OR REPLACE TRIGGER "LEHZ_TRG_BUS_CAPACIDAD" 
+BEFORE UPDATE OF CAPACIDAD ON LEHZ_BUS
+FOR EACH ROW
+DECLARE
+    v_asientos NUMBER := 0;
+BEGIN
+    IF :NEW.CAPACIDAD IS NULL OR :NEW.CAPACIDAD <= 0 THEN
+	RAISE_APPLICATION_ERROR(-20210, 'La capacidad del bus debe ser mayor que cero.');
+    END IF;
+
+    SELECT COUNT(*)
+      INTO v_asientos
+      FROM LEHZ_ASIENTO
+     WHERE PATENTE_BUS = :NEW.PATENTE_BUS;
+
+    IF :NEW.CAPACIDAD < v_asientos THEN
+	RAISE_APPLICATION_ERROR(-20210, 'Capacidad invalida: el bus ya tiene ' || v_asientos || ' asientos registrados; no puede declarar menos.');
+    END IF;
+END;
+ALTER TRIGGER "LEHZ_TRG_BUS_CAPACIDAD" ENABLE;
+/
+CREATE OR REPLACE TRIGGER "LEHZ_TRG_BUS_VALIDA_ANIO" 
+BEFORE INSERT OR UPDATE OF ANIO_FABRICACION ON LEHZ_BUS
+FOR EACH ROW
+DECLARE
+    v_anio_actual NUMBER := EXTRACT(YEAR FROM SYSDATE);
+BEGIN
+    IF :NEW.ANIO_FABRICACION IS NULL THEN
+	RAISE_APPLICATION_ERROR(-20201, 'El anio de fabricacion del bus es obligatorio.');
+    END IF;
+    IF :NEW.ANIO_FABRICACION < 1995 OR :NEW.ANIO_FABRICACION > v_anio_actual + 1 THEN
+	RAISE_APPLICATION_ERROR(-20201, 'Anio de fabricacion invalido: debe estar entre 1995 y ' || (v_anio_actual + 1) || '.');
+    END IF;
+END;
+ALTER TRIGGER "LEHZ_TRG_BUS_VALIDA_ANIO" ENABLE;
+/
+CREATE OR REPLACE TRIGGER "LEHZ_TRG_CONDUCE_VALIDA" 
+BEFORE INSERT OR UPDATE ON LEHZ_CONDUCE
+FOR EACH ROW
+DECLARE
+    v_vencimiento DATE;
+    v_fecha_viaje DATE;
+    v_horario	  NUMBER;
+    v_count	  NUMBER := 0;
+BEGIN
+    SELECT VENCIMIENTO_LICENCIA
+      INTO v_vencimiento
+      FROM LEHZ_CONDUCTOR
+     WHERE RUT_CONDUCTOR = :NEW.RUT_CONDUCTOR;
+
+    SELECT FECHA_VIAJE, ID_HORARIO
+      INTO v_fecha_viaje, v_horario
+      FROM LEHZ_VIAJE
+     WHERE ID_VIAJE = :NEW.ID_VIAJE;
+
+    IF v_vencimiento IS NULL OR v_vencimiento < v_fecha_viaje THEN
+	RAISE_APPLICATION_ERROR(-20204, 'No se puede asignar el conductor: su licencia esta vencida o no tiene fecha de vencimiento para el viaje del ' || TO_CHAR(v_fecha_viaje, 'DD/MM/YYYY') || '.');
+    END IF;
+
+    SELECT COUNT(*)
+      INTO v_count
+      FROM LEHZ_MANTENCION
+     WHERE PATENTE_BUS = :NEW.PATENTE_BUS
+       AND TRUNC(FECHA_MANTENCION) = TRUNC(v_fecha_viaje);
+
+    IF v_count > 0 THEN
+	RAISE_APPLICATION_ERROR(-20204, 'No se puede asignar el bus: tiene una mantencion registrada para la fecha del viaje.');
+    END IF;
+
+    SELECT COUNT(*)
+      INTO v_count
+      FROM LEHZ_CONDUCE c
+      INNER JOIN LEHZ_VIAJE v ON v.ID_VIAJE = c.ID_VIAJE
+     WHERE v.ID_HORARIO = v_horario
+       AND TRUNC(v.FECHA_VIAJE) = TRUNC(v_fecha_viaje)
+       AND c.ID_VIAJE <> :NEW.ID_VIAJE
+       AND (c.RUT_CONDUCTOR = :NEW.RUT_CONDUCTOR OR c.PATENTE_BUS = :NEW.PATENTE_BUS);
+
+    IF v_count > 0 THEN
+	RAISE_APPLICATION_ERROR(-20204, 'El conductor o el bus ya estan asignados a otro viaje en la misma fecha y bloque horario.');
+    END IF;
+END;
+ALTER TRIGGER "LEHZ_TRG_CONDUCE_VALIDA" ENABLE;
+/
+CREATE OR REPLACE TRIGGER "LEHZ_TRG_CONDUCTOR_LICENCIA" 
+BEFORE INSERT OR UPDATE OF VENCIMIENTO_LICENCIA, TIPO_LICENCIA ON LEHZ_CONDUCTOR
+FOR EACH ROW
+BEGIN
+    IF :NEW.VENCIMIENTO_LICENCIA IS NULL THEN
+	RAISE_APPLICATION_ERROR(-20211, 'El conductor debe tener fecha de vencimiento de licencia.');
+    END IF;
+    IF :NEW.VENCIMIENTO_LICENCIA < TRUNC(SYSDATE) THEN
+	RAISE_APPLICATION_ERROR(-20211, 'La licencia del conductor esta vencida (vence el ' || TO_CHAR(:NEW.VENCIMIENTO_LICENCIA, 'DD/MM/YYYY') || ').');
+    END IF;
+    IF :NEW.TIPO_LICENCIA IS NULL OR UPPER(TRIM(:NEW.TIPO_LICENCIA)) NOT IN ('A1', 'A2', 'A3') THEN
+	RAISE_APPLICATION_ERROR(-20211, 'Tipo de licencia invalido: debe ser A1, A2 o A3.');
+    END IF;
+END;
+ALTER TRIGGER "LEHZ_TRG_CONDUCTOR_LICENCIA" ENABLE;
+/
+CREATE OR REPLACE TRIGGER "LEHZ_TRG_HORARIO_VALIDA" 
+BEFORE INSERT OR UPDATE ON LEHZ_HORARIO
+FOR EACH ROW
+BEGIN
+    IF :NEW.HORA_SALIDA IS NULL OR :NEW.HORA_LLEGADA IS NULL THEN
+	RAISE_APPLICATION_ERROR(-20209, 'El horario debe tener hora de salida y de llegada.');
+    END IF;
+    IF :NEW.HORA_LLEGADA <= :NEW.HORA_SALIDA THEN
+	RAISE_APPLICATION_ERROR(-20209, 'La hora de llegada debe ser posterior a la hora de salida.');
+    END IF;
+END;
+ALTER TRIGGER "LEHZ_TRG_HORARIO_VALIDA" ENABLE;
+/
+CREATE OR REPLACE TRIGGER "LEHZ_TRG_NORM_ASIENTO" 
+BEFORE INSERT OR UPDATE OF UBICACION ON LEHZ_ASIENTO
+FOR EACH ROW
+BEGIN
+    :NEW.UBICACION := UPPER(TRIM(:NEW.UBICACION));
+END;
+ALTER TRIGGER "LEHZ_TRG_NORM_ASIENTO" ENABLE;
+/
+CREATE OR REPLACE TRIGGER "LEHZ_TRG_NORM_COMUNA" 
+BEFORE INSERT OR UPDATE OF NOMBRE_COMUNA ON LEHZ_COMUNA
+FOR EACH ROW
+BEGIN
+    :NEW.NOMBRE_COMUNA := LEHZ_FN_NORMALIZAR_TEXTO(:NEW.NOMBRE_COMUNA);
+END;
+ALTER TRIGGER "LEHZ_TRG_NORM_COMUNA" ENABLE;
+/
+CREATE OR REPLACE TRIGGER "LEHZ_TRG_NORM_PASAJE_BAJADA" 
+BEFORE INSERT OR UPDATE OF OBSERVACION ON LEHZ_PASAJE_BAJADA
+FOR EACH ROW
+BEGIN
+    :NEW.OBSERVACION := LEHZ_FN_NORMALIZAR_TEXTO(:NEW.OBSERVACION);
+END;
+ALTER TRIGGER "LEHZ_TRG_NORM_PASAJE_BAJADA" ENABLE;
+/
+CREATE OR REPLACE TRIGGER "LEHZ_TRG_NORM_REGION" 
+BEFORE INSERT OR UPDATE OF NOMBRE_REGION ON LEHZ_REGION
+FOR EACH ROW
+BEGIN
+    :NEW.NOMBRE_REGION := LEHZ_FN_NORMALIZAR_TEXTO(:NEW.NOMBRE_REGION);
+END;
+ALTER TRIGGER "LEHZ_TRG_NORM_REGION" ENABLE;
+/
+CREATE OR REPLACE TRIGGER "LEHZ_TRG_NORM_RUTA" 
+BEFORE INSERT OR UPDATE OF NOMBRE_RUTA ON LEHZ_RUTA
+FOR EACH ROW
+BEGIN
+    :NEW.NOMBRE_RUTA := LEHZ_FN_NORMALIZAR_TEXTO(:NEW.NOMBRE_RUTA);
+END;
+ALTER TRIGGER "LEHZ_TRG_NORM_RUTA" ENABLE;
+/
+CREATE OR REPLACE TRIGGER "LEHZ_TRG_NORM_TERMINAL" 
+BEFORE INSERT OR UPDATE OF NOMBRE, CALLE ON LEHZ_TERMINAL
+FOR EACH ROW
+BEGIN
+    :NEW.NOMBRE := LEHZ_FN_NORMALIZAR_TEXTO(:NEW.NOMBRE);
+    :NEW.CALLE	:= LEHZ_FN_NORMALIZAR_TEXTO(:NEW.CALLE);
+END;
+ALTER TRIGGER "LEHZ_TRG_NORM_TERMINAL" ENABLE;
+/
+CREATE OR REPLACE TRIGGER "LEHZ_TRG_NORM_VAL_BUS" 
+BEFORE INSERT OR UPDATE ON LEHZ_BUS
+FOR EACH ROW
+BEGIN
+    :NEW.PATENTE_BUS   := LEHZ_FN_NORMALIZAR_PATENTE(:NEW.PATENTE_BUS);
+    :NEW.MARCA	       := LEHZ_FN_NORMALIZAR_TEXTO(:NEW.MARCA);
+    :NEW.MODELO        := LEHZ_FN_NORMALIZAR_TEXTO(:NEW.MODELO);
+    :NEW.TIPO_SERVICIO := UPPER(TRIM(:NEW.TIPO_SERVICIO));
+END;
+ALTER TRIGGER "LEHZ_TRG_NORM_VAL_BUS" ENABLE;
+/
+CREATE OR REPLACE TRIGGER "LEHZ_TRG_NORM_VAL_CONDUCTOR" 
+BEFORE INSERT OR UPDATE ON LEHZ_CONDUCTOR
+FOR EACH ROW
+BEGIN
+    :NEW.RUT_CONDUCTOR	     := LEHZ_FN_VALIDAR_RUT_CL(:NEW.RUT_CONDUCTOR, 'PERSONA');
+    :NEW.NOMBRE_CONDUCTOR    := LEHZ_FN_NORMALIZAR_TEXTO(:NEW.NOMBRE_CONDUCTOR);
+    :NEW.APELLIDO1_CONDUCTOR := LEHZ_FN_NORMALIZAR_TEXTO(:NEW.APELLIDO1_CONDUCTOR);
+    :NEW.APELLIDO2_CONDUCTOR := LEHZ_FN_NORMALIZAR_TEXTO(:NEW.APELLIDO2_CONDUCTOR);
+    :NEW.TELEFONO	     := LEHZ_FN_VALIDAR_TEL_CL(:NEW.TELEFONO, 'PERSONA');
+END;
+ALTER TRIGGER "LEHZ_TRG_NORM_VAL_CONDUCTOR" ENABLE;
+/
+CREATE OR REPLACE TRIGGER "LEHZ_TRG_NORM_VAL_EMPRESA" 
+BEFORE INSERT OR UPDATE ON LEHZ_EMPRESA
+FOR EACH ROW
+BEGIN
+    :NEW.RUT_EMPRESA	  := LEHZ_FN_VALIDAR_RUT_CL(:NEW.RUT_EMPRESA, 'EMPRESA');
+    :NEW.RAZON_SOCIAL	  := LEHZ_FN_NORMALIZAR_TEXTO(:NEW.RAZON_SOCIAL);
+    :NEW.TELEFONO_EMPRESA := LEHZ_FN_VALIDAR_TEL_CL(:NEW.TELEFONO_EMPRESA, 'EMPRESA');
+END;
+ALTER TRIGGER "LEHZ_TRG_NORM_VAL_EMPRESA" ENABLE;
+/
+CREATE OR REPLACE TRIGGER "LEHZ_TRG_NORM_VAL_MECANICO" 
+BEFORE INSERT OR UPDATE ON LEHZ_MECANICO
+FOR EACH ROW
+BEGIN
+    :NEW.RUT_MECANICO	    := LEHZ_FN_VALIDAR_RUT_CL(:NEW.RUT_MECANICO, 'PERSONA');
+    :NEW.NOMBRE_MECANICO    := LEHZ_FN_NORMALIZAR_TEXTO(:NEW.NOMBRE_MECANICO);
+    :NEW.APELLIDO1_MECANICO := LEHZ_FN_NORMALIZAR_TEXTO(:NEW.APELLIDO1_MECANICO);
+    :NEW.APELLIDO2_MECANICO := LEHZ_FN_NORMALIZAR_TEXTO(:NEW.APELLIDO2_MECANICO);
+    :NEW.ESPECIALIDAD	    := LEHZ_FN_NORMALIZAR_TEXTO(:NEW.ESPECIALIDAD);
+    :NEW.TELEFONO	    := LEHZ_FN_VALIDAR_TEL_CL(:NEW.TELEFONO, 'PERSONA');
+END;
+ALTER TRIGGER "LEHZ_TRG_NORM_VAL_MECANICO" ENABLE;
+/
+CREATE OR REPLACE TRIGGER "LEHZ_TRG_NORM_VAL_PASAJERO" 
+BEFORE INSERT OR UPDATE ON LEHZ_PASAJERO
+FOR EACH ROW
+BEGIN
+    :NEW.RUT_PASAJERO	    := LEHZ_FN_VALIDAR_RUT_CL(:NEW.RUT_PASAJERO, 'PERSONA');
+    :NEW.NOMBRE_PASAJERO    := LEHZ_FN_NORMALIZAR_TEXTO(:NEW.NOMBRE_PASAJERO);
+    :NEW.APELLIDO1_PASAJERO := LEHZ_FN_NORMALIZAR_TEXTO(:NEW.APELLIDO1_PASAJERO);
+    :NEW.APELLIDO2_PASAJERO := LEHZ_FN_NORMALIZAR_TEXTO(:NEW.APELLIDO2_PASAJERO);
+    :NEW.TELEFONO	    := LEHZ_FN_VALIDAR_TEL_CL(:NEW.TELEFONO, 'PERSONA');
+END;
+ALTER TRIGGER "LEHZ_TRG_NORM_VAL_PASAJERO" ENABLE;
+/
+CREATE OR REPLACE TRIGGER "LEHZ_TRG_NORM_VAL_USUARIO" 
+BEFORE INSERT OR UPDATE OF NOMBRE_COMPLETO ON LEHZ_USUARIO
+FOR EACH ROW
+BEGIN
+    :NEW.NOMBRE_COMPLETO := LEHZ_FN_NORMALIZAR_TEXTO(:NEW.NOMBRE_COMPLETO);
+END;
+ALTER TRIGGER "LEHZ_TRG_NORM_VAL_USUARIO" ENABLE;
+/
+CREATE OR REPLACE TRIGGER "LEHZ_TRG_PAGO_VALIDA" 
+BEFORE INSERT OR UPDATE ON LEHZ_PAGO
+FOR EACH ROW
+DECLARE
+    v_valor	 NUMBER;
+    v_estado	 VARCHAR2(10);
+    v_rut	 VARCHAR2(12);
+BEGIN
+    SELECT VALOR_BOLETO, ESTADO, RUT_PASAJERO
+      INTO v_valor, v_estado, v_rut
+      FROM LEHZ_BOLETO
+     WHERE ID_BOLETO = :NEW.ID_BOLETO;
+
+    IF v_estado = 'ANULADO' THEN
+	RAISE_APPLICATION_ERROR(-20212, 'No se puede registrar un pago para un boleto anulado.');
+    END IF;
+    IF :NEW.RUT_PASAJERO <> v_rut THEN
+	RAISE_APPLICATION_ERROR(-20212, 'El RUT del pago no coincide con el pasajero del boleto.');
+    END IF;
+    IF :NEW.MONTO_PAGO <> v_valor THEN
+	RAISE_APPLICATION_ERROR(-20212, 'El monto del pago (' || :NEW.MONTO_PAGO || ') no coincide con el valor del boleto (' || v_valor || ').');
+    END IF;
+END;
+ALTER TRIGGER "LEHZ_TRG_PAGO_VALIDA" ENABLE;
+/
+CREATE OR REPLACE TRIGGER "LEHZ_TRG_PASAJE_BAJADA_VALIDA" 
+BEFORE INSERT OR UPDATE ON LEHZ_PASAJE_BAJADA
+FOR EACH ROW
+DECLARE
+    v_id_ruta NUMBER;
+    v_count   NUMBER := 0;
+BEGIN
+    SELECT v.ID_RUTA
+      INTO v_id_ruta
+      FROM LEHZ_BOLETO b
+      INNER JOIN LEHZ_VIAJE v ON v.ID_VIAJE = b.ID_VIAJE
+     WHERE b.ID_BOLETO = :NEW.ID_BOLETO;
+
+    SELECT COUNT(*)
+      INTO v_count
+      FROM LEHZ_RUTA_PARADA rp
+     WHERE rp.ID_RUTA = v_id_ruta
+       AND rp.ID_TERMINAL = :NEW.ID_TERMINAL_BAJADA
+       AND rp.PERMITE_BAJADA = 'S'
+       AND rp.ORDEN_PARADA > 1;
+
+    IF v_count = 0 THEN
+	RAISE_APPLICATION_ERROR(-20207, 'La bajada seleccionada no es una parada habilitada de la ruta del viaje.');
+    END IF;
+END;
+ALTER TRIGGER "LEHZ_TRG_PASAJE_BAJADA_VALIDA" ENABLE;
+/
+CREATE OR REPLACE TRIGGER "LEHZ_TRG_RUTA_PARADA_VALIDA" 
+BEFORE INSERT OR UPDATE ON LEHZ_RUTA_PARADA
+FOR EACH ROW
+DECLARE
+    v_origen  NUMBER;
+    v_destino NUMBER;
+BEGIN
+    SELECT ID_TERMINAL_ORIGEN, ID_TERMINAL_DESTINO
+      INTO v_origen, v_destino
+      FROM LEHZ_RUTA
+     WHERE ID_RUTA = :NEW.ID_RUTA;
+
+    IF :NEW.ORDEN_PARADA = 1 AND :NEW.ID_TERMINAL <> v_origen THEN
+	RAISE_APPLICATION_ERROR(-20208, 'La primera parada de la ruta debe ser el terminal de origen.');
+    END IF;
+
+    IF :NEW.ID_TERMINAL = v_origen AND :NEW.ORDEN_PARADA <> 1 THEN
+	RAISE_APPLICATION_ERROR(-20208, 'El terminal de origen solo puede registrarse en la parada 1.');
+    END IF;
+
+    IF :NEW.ID_TERMINAL = v_destino AND :NEW.PERMITE_BAJADA <> 'S' THEN
+	RAISE_APPLICATION_ERROR(-20208, 'El terminal de destino debe permitir la bajada de pasajeros.');
+    END IF;
+END;
+ALTER TRIGGER "LEHZ_TRG_RUTA_PARADA_VALIDA" ENABLE;
+/
+CREATE OR REPLACE TRIGGER "LEHZ_TRG_VALIDAR_FECHA_MANTENCION" 
+BEFORE INSERT OR UPDATE
+ON LEHZ_MANTENCION
+FOR EACH ROW
+DECLARE
+    v_asignaciones NUMBER := 0;
+BEGIN
+    IF :NEW.FECHA_MANTENCION IS NULL THEN
+	RAISE_APPLICATION_ERROR(-20213, 'La fecha de la mantencion es obligatoria.');
+    END IF;
+    IF TRUNC(:NEW.FECHA_MANTENCION) > TRUNC(SYSDATE) THEN
+	RAISE_APPLICATION_ERROR(-20213, 'La fecha de la mantencion no puede ser mayor a la fecha actual.');
+    END IF;
+    IF :NEW.DESCRIPCION_MANTENCION IS NULL OR TRIM(:NEW.DESCRIPCION_MANTENCION) = '' THEN
+	RAISE_APPLICATION_ERROR(-20213, 'La descripcion de la mantencion es obligatoria.');
+    END IF;
+    IF :NEW.COSTO_MANTENCION IS NULL OR :NEW.COSTO_MANTENCION < 0 THEN
+	RAISE_APPLICATION_ERROR(-20213, 'El costo de la mantencion debe ser mayor o igual a cero.');
+    END IF;
+
+    SELECT COUNT(*)
+      INTO v_asignaciones
+      FROM LEHZ_CONDUCE c
+      INNER JOIN LEHZ_VIAJE v ON v.ID_VIAJE = c.ID_VIAJE
+     WHERE c.PATENTE_BUS = :NEW.PATENTE_BUS
+       AND TRUNC(v.FECHA_VIAJE) = TRUNC(:NEW.FECHA_MANTENCION);
+
+    IF v_asignaciones > 0 THEN
+	RAISE_APPLICATION_ERROR(-20213, 'No se puede registrar la mantencion: el bus esta asignado a un viaje en esa fecha.');
+    END IF;
+END;
+ALTER TRIGGER "LEHZ_TRG_VALIDAR_FECHA_MANTENCION" ENABLE;
+/
+CREATE OR REPLACE TRIGGER "LEHZ_TRG_VIAJE_FECHA" 
+BEFORE INSERT OR UPDATE OF FECHA_VIAJE ON LEHZ_VIAJE
+FOR EACH ROW
+BEGIN
+    IF TRUNC(:NEW.FECHA_VIAJE) < TRUNC(SYSDATE) THEN
+	RAISE_APPLICATION_ERROR(-20203, 'Fecha de viaje invalida: no se pueden programar viajes en dias anteriores a hoy.');
+    END IF;
+END;
+ALTER TRIGGER "LEHZ_TRG_VIAJE_FECHA" ENABLE;
+/
+
+BEGIN
+  FOR r IN (SELECT object_name, object_type FROM user_objects WHERE status='INVALID' AND object_type IN ('PACKAGE','PACKAGE BODY','PROCEDURE','FUNCTION','TRIGGER','VIEW')) LOOP
+    BEGIN
+      IF r.object_type = 'PACKAGE BODY' THEN
+        EXECUTE IMMEDIATE 'ALTER PACKAGE ' || r.object_name || ' COMPILE BODY';
+      ELSE
+        EXECUTE IMMEDIATE 'ALTER ' || r.object_type || ' ' || r.object_name || ' COMPILE';
+      END IF;
+    EXCEPTION WHEN OTHERS THEN NULL;
+    END;
+  END LOOP;
+END;
+/
+COMMIT;
+EXIT;

@@ -39,7 +39,7 @@ Abrir PowerShell como Administrador y permitir los puertos:
 
 ```powershell
 New-NetFirewallRule -DisplayName "LEHZ Web 8000" -Direction Inbound -LocalPort 8000 -Protocol TCP -Action Allow
-New-NetFirewallRule -DisplayName "Oracle Docker 1521" -Direction Inbound -LocalPort 1521 -Protocol TCP -Action Allow
+# No abras el puerto 1521: Oracle solo se usa desde la red interna de Docker.
 ```
 
 ### En la laptop de 4 GB
@@ -85,17 +85,12 @@ Solo si necesitas trabajar en los `.sql`. Es más pesado que la Opción 1, pero 
    - Instalar **`Oracle SQL Developer for VSCode`** (de Oracle Corporation).
    - Desactivar extensiones pesadas que no uses.
 
-3. Crear la conexión:
-   - **Nombre:** `LEHZ_Remoto`
-   - **Tipo:** `Esencial`
-   - **Host:** `100.x.y.z` *(IP Tailscale del servidor)*
-   - **Puerto:** `1521`
-   - **Tipo:** `Nombre de servicio`
-   - **Servicio:** `FREEPDB1`
-   - **Usuario:** `LEHZ`
-   - **Contraseña:** `Lehz1234`
+3. **Oracle no publica el puerto `1521`**, así que no hay conexión directa desde la laptop. Para ejecutar scripts, usa **Escritorio Remoto (Opción 3B)** y corre en el servidor:
+   ```powershell
+   Get-Content .\database\04_migracion\08_verificacion.sql | docker exec -i oracle-lehz sqlplus -s LEHZ/Lehz1234@localhost:1521/FREEPDB1
+   ```
 
-4. Probar conexión y ejecutar/scripts **con coordinación del equipo**: lo que ejecutes afecta la base del servidor.
+4. Si necesitas GUI de SQL Developer, hazlo dentro del escritorio remoto con host `localhost`, puerto `1521`, servicio `FREEPDB1`, usuario `LEHZ` y contraseña `Lehz1234`. Ejecuta scripts **con coordinación del equipo**: lo que ejecutes afecta la base del servidor.
 
 > Si la laptop se queda corta de memoria, cierra VS Code y vuelve a la Opción 1 (solo navegador).
 

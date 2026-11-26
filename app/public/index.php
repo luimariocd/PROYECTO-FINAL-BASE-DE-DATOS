@@ -103,31 +103,6 @@ if ($action === 'login') {
     }
 }
 
-if ($action === 'register') {
-    try {
-        $out = db_call(
-            'BEGIN LEHZ_PS_REGISTRAR_PUBLICO(:p_username, :p_password, :p_password_confirm, :p_nombre_completo, :p_email, :p_estado, :p_mensaje); END;',
-            [
-                'p_username' => $_POST['username'] ?? null,
-                'p_password' => $_POST['password'] ?? null,
-                'p_password_confirm' => $_POST['password_confirm'] ?? null,
-                'p_nombre_completo' => $_POST['nombre_completo'] ?? null,
-                'p_email' => $_POST['email'] ?? null,
-                'p_estado' => null,
-                'p_mensaje' => null,
-            ]
-        );
-        if (($out['p_estado'] ?? '') === 'OK') {
-            success_and_go((string)$out['p_mensaje'], '?page=login');
-        }
-        remember_old($_POST);
-        auth_flash('error', (string)($out['p_mensaje'] ?? 'Oracle no pudo completar el registro.'));
-        redirect_to('?page=login&tab=register');
-    } catch (Throwable $e) {
-        fail_and_go($e, '?page=login&tab=register');
-    }
-}
-
 if ($action !== '') {
     if (!auth_user()) {
         redirect_to('?page=login');

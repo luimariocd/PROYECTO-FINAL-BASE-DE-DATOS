@@ -8,7 +8,6 @@ $viajes = db_rows('LEHZ_PS_LISTAR_VIAJES');
         <h3 class="card-title mb-0">Programar viaje</h3>
         <div class="text-body-secondary small mt-1">Oracle rechaza fechas pasadas, duplicados y combinaciones invalidas.</div>
     </div>
-<<<<<<< HEAD
     <div class="card-body">
         <form method="post" class="row g-3">
             <input type="hidden" name="action" value="viaje">
@@ -40,32 +39,6 @@ $viajes = db_rows('LEHZ_PS_LISTAR_VIAJES');
         </form>
     </div>
 </div>
-=======
-    <form method="post" class="form-grid">
-        <input type="hidden" name="action" value="viaje">
-        <label>Fecha del viaje
-            <input type="date" name="fecha_viaje" required min="<?= date('Y-m-d') ?>" value="<?= h(old_value('fecha_viaje')) ?>">
-        </label>
-        <label>Horario
-            <select name="id_horario" required>
-                <option value="">Seleccione un horario...</option>
-                <?php foreach ($horarios as $h): ?>
-                    <option value="<?= h($h['value']) ?>" <?= (string)old_value('id_horario') === (string)$h['value'] ? 'selected' : '' ?>><?= h($h['label']) ?></option>
-                <?php endforeach; ?>
-            </select>
-        </label>
-        <label class="span-2">Ruta
-            <select name="id_ruta" required>
-                <option value="">Seleccione una ruta...</option>
-                <?php foreach ($rutas as $r): ?>
-                    <option value="<?= h($r['value']) ?>" <?= (string)old_value('id_ruta') === (string)$r['value'] ? 'selected' : '' ?>><?= h($r['label']) ?></option>
-                <?php endforeach; ?>
-            </select>
-        </label>
-        <div class="form-actions"><button class="btn primary" type="submit">Programar viaje</button></div>
-    </form>
-</section>
->>>>>>> 05e766dd077aefce9c75935cc0164f80ed0eb28f
 
 <div class="card mb-4">
     <div class="card-header">

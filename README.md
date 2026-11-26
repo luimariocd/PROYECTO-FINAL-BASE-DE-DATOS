@@ -134,7 +134,7 @@ Docker Desktop necesita el **Subsistema de Windows para Linux (WSL 2)** para eje
 > Si tu laptop tiene **4 GB**, no instales Docker ni ejecutes estos comandos: ve directo a **`GUIA_LAPTOP_4GB.md`** y conecta por Tailscale al servidor del equipo.
 
 El archivo `docker-compose.yml` junto con el `Dockerfile` levantan automáticamente dos servicios conectados entre sí:
-* **`oracle-db`** (contenedor `oracle-lehz`): Base de datos Oracle Database Free (`FREEPDB1`) en el puerto `1521`.
+* **`oracle-db`** (contenedor `oracle-lehz`): Base de datos Oracle Database Free (`FREEPDB1`), accesible solo desde la red interna de Docker en el puerto `1521` (**no publicado en el host**).
 * **`web`** (contenedor `lehz-web`): Servidor PHP 8 + OCI8 con la interfaz en `http://localhost:8000`.
 
 1. Clonar el proyecto y entrar a la carpeta:
@@ -167,21 +167,16 @@ El archivo `docker-compose.yml` junto con el `Dockerfile` levantan automáticame
 
 1. Abrir la carpeta `PROYECTO-FINAL-BASE-DE-DATOS` en **Visual Studio Code**.
 2. Abrir el panel de **Extensiones** (`Ctrl + Shift + X`), buscar **`Oracle SQL Developer for VSCode`** (autor: **Oracle Corporation**) e instalarla.
-3. Hacer clic en el **ícono morado de SQL Developer** en la barra izquierda, presionar **`+`** (*Nueva conexión*) e ingresar:
-   * **Nombre de conexión:** `LEHZ_Docker`
-   * **Tipo de Conexión:** `Esencial`
-   * **Nombre de host:** `localhost`
-   * **Puerto:** `1521`
-   * **Tipo:** `Nombre de servicio`
-   * **Nombre de servicio:** `FREEPDB1`
-   * **Nombre de Usuario:** `LEHZ`
-   * **Contraseña:** `Lehz1234` *(marcar Guardar Contraseña)*
-4. Presionar **Probar** y luego **Establecer conexión**.
-5. Ejecutar en orden los scripts de la carpeta `database/` asociados a `LEHZ_Docker` (`01_tablas` → `02_secuencias` → `03_seguridad` → `04_triggers` → `05_mantenedores` → `06_gestores` → `07_reportes` → `08_datos_prueba`).
+3. El contenedor **no publica el puerto `1521` en Windows**. Para ejecutar scripts usa SQL*Plus dentro del contenedor:
+   ```powershell
+   Get-Content .\database\04_migracion\08_verificacion.sql | docker exec -i oracle-lehz sqlplus -s LEHZ/Lehz1234@localhost:1521/FREEPDB1
+   ```
+   Para conectarte con SQL Developer desde otro contenedor usa host `oracle-db`, puerto `1521`, servicio `FREEPDB1`, usuario `LEHZ` y contraseña `Lehz1234`. Desde Windows, si necesitas GUI, usa un túnel SSH en lugar de publicar el puerto.
+4. Ejecutar en orden los scripts de la carpeta `database/` dentro del contenedor (`01_tablas` → `02_secuencias` → `03_seguridad` → `04_triggers` → `05_mantenedores` → `06_gestores` → `07_reportes` → `08_datos_prueba`).
    * Dentro de `01_tablas`, ejecuta `01_drop_tables.sql`, `02_create_tables.sql` y luego **`03_cat_chile.sql`** (catálogo fijo de 16 regiones y 346 comunas).
    * Las carpetas `04_triggers`, `05_mantenedores`, `06_gestores`, `07_reportes` y `08_datos_prueba` incluyen sus respectivos `drop/` para poder reinstalar sin errores.
 
-> **Si solo vienes a actualizar la interfaz**, salta este paso: la base de datos no cambió entre la versión antigua y la nueva.
+> **Si vienes de una instalación anterior con `LEHZ` incompleto**, aplica además la migración documentada en `database/04_migracion/README.md`. La interfaz usa `DB_USER=LEHZ` por defecto; no definas `DB_USER=LEHZTEST` salvo que quieras probar contra el esquema de validación.
 
 ---
 
@@ -191,6 +186,7 @@ Una vez levantados los contenedores y cargados los scripts PL/SQL:
 
 1. Abrir el navegador e ingresar a **`http://localhost:8000`**.
 2. Iniciar sesión con las credenciales creadas en `database/03_seguridad/` (por ejemplo `admin` / `Admin1234`).
+3. No existe registro público: los usuarios los crea únicamente el administrador desde el módulo **Usuarios**.
 
 ---
 
@@ -285,7 +281,8 @@ PROYECTO-FINAL-BASE-DE-DATOS/
 │   ├── 05_mantenedores/   # 10 CRUDs con PA, funciones y cursores (+ drop/)
 │   ├── 06_gestores/       # 5 módulos transaccionales (+ Drop/)
 │   ├── 07_reportes/       # 4 reportes estratégicos (+ Drops/)
-│   └── 08_datos_prueba/   # Carga de datos reales para demostración (+ Drops/)
+│   ├── 08_datos_prueba/   # Carga de datos reales para demostración (+ Drops/)
+│   └── 04_migracion/      # Migración LEHZTEST → LEHZ y respaldos LEHZ_BAK_*
 ├── docs/                  # Diagrama 3FN, presentación PPT y video demo
 ├── CONEXION_REMOTA.md     # Guía de conexión remota vía Tailscale (web + Oracle)
 ├── GUIA_LAPTOP_4GB.md     # Guía para laptop de 4 GB: usar el sistema sin Docker local
