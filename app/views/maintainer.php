@@ -21,6 +21,7 @@ if ($rows) {
                 Las altas, cambios y bajas se ejecutan con el procedimiento <?= h($meta['proc']) ?>.
             </div>
         </div>
+        <input class="form-control filter-input" type="search" data-filter="maintainerBody" placeholder="Filtrar registros..." aria-label="Filtrar registros" style="max-width: 18rem;">
         <button class="btn btn-primary" type="button" onclick="openCreate()">
             <i class="bi bi-plus-lg me-1"></i>Nuevo registro
         </button>
@@ -34,22 +35,42 @@ if ($rows) {
                         <th class="text-end">Acciones</th>
                     </tr>
                 </thead>
-                <tbody>
+                <tbody id="maintainerBody">
                 <?php foreach ($rows as $row): ?>
+                    <?php
+                    // Esta parte del código se encarga de bloquear la baja cuando Oracle informa dependencias en la fila.
+                    $deleteLabel = (string)($row[$meta['id'][0]['name']] ?? '');
+                    $blockedDelete = false;
+                    foreach (['TIENE_DEPENDENCIAS', 'DEPENDENCIAS', 'BLOQUEADO'] as $flag) {
+                        $flagValue = strtoupper(trim((string)($row[$flag] ?? '')));
+                        if (in_array($flagValue, ['S', '1', 'Y', 'TRUE', 'ON', 'YES'], true) || (is_numeric($flagValue) && (float)$flagValue > 0)) {
+                            $blockedDelete = true;
+                            break;
+                        }
+                    }
+                    if (isset($row['ELIMINABLE'])) {
+                        $flagValue = strtoupper(trim((string)$row['ELIMINABLE']));
+                        if (in_array($flagValue, ['N', '0', 'NO', 'FALSE', 'OFF'], true)) {
+                            $blockedDelete = true;
+                        }
+                    }
+                    $confirmMsg = '¿Eliminar ' . ($deleteLabel !== '' ? $deleteLabel : 'este registro') . '? Oracle validara dependencias y mostrara el motivo si no es posible.';
+                    $deleteAttrs = $blockedDelete ? 'disabled title="No se puede eliminar: tiene dependencias."' : 'title="Eliminar"';
+                    ?>
                     <tr>
                         <?php foreach ($columns as $col): ?><td><?= h(format_cell($col, $row[$col] ?? null)) ?></td><?php endforeach; ?>
                         <td class="text-end text-nowrap">
                             <button class="btn btn-sm btn-outline-primary" type="button" title="Editar" onclick='editMaintainer(<?= h(json_encode($row, JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT)) ?>)'>
                                 <i class="bi bi-pencil"></i>
                             </button>
-                            <form method="post" class="d-inline" onsubmit="return confirm('¿Eliminar este registro?');">
+                            <form method="post" class="d-inline" onsubmit="return confirm(<?= h(json_encode($confirmMsg, JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT)) ?>);">
                                 <input type="hidden" name="action" value="maintainer">
                                 <input type="hidden" name="module" value="<?= h($key) ?>">
                                 <input type="hidden" name="op" value="D">
                                 <?php foreach ($meta['id'] as $id): ?>
                                     <input type="hidden" name="original_<?= h($id['name']) ?>" value="<?= h($row[$id['name']] ?? '') ?>">
                                 <?php endforeach; ?>
-                                <button class="btn btn-sm btn-outline-danger" type="submit" title="Eliminar"><i class="bi bi-trash"></i></button>
+                                <button class="btn btn-sm btn-outline-danger" type="submit" <?= $deleteAttrs ?>><i class="bi bi-trash"></i></button>
                             </form>
                         </td>
                     </tr>
@@ -86,7 +107,7 @@ if ($rows) {
                             <div class="col-md-6" id="idwrap_<?= h($id['name']) ?>">
                                 <label class="form-label" for="field_<?= h($id['name']) ?>"><?= h($id['label'] ?? column_label($id['name'])) ?></label>
                                 <?php if (isset($id['source'])): ?>
-                                    <select class="form-select" name="<?= h($id['name']) ?>" id="field_<?= h($id['name']) ?>" data-idfield="1">
+                                    <select class="form-select" name="<?= h($id['name']) ?>" id="field_<?= h($id['name']) ?>" data-idfield="1" required>
                                         <option value="">Seleccione...</option>
                                         <?php foreach (lookup_options($id['source']) as $option): ?>
                                             <option value="<?= h($option['value']) ?>" <?= (string)old_value($id['name']) === (string)$option['value'] ? 'selected' : '' ?>><?= h($option['label']) ?></option>
@@ -101,6 +122,7 @@ if ($rows) {
                                         data-idfield="1"
                                         <?= str_starts_with($id['name'], 'RUT_') ? 'data-rut="1"' : '' ?>
                                         placeholder="<?= h($id['placeholder'] ?? '') ?>"
+                                        required
                                         value="<?= h(old_value($id['name'])) ?>">
                                 <?php endif; ?>
                                 <input type="hidden" name="original_<?= h($id['name']) ?>" id="orig_<?= h($id['name']) ?>" value="<?= h(old_value('original_' . $id['name'])) ?>">
@@ -112,8 +134,9 @@ if ($rows) {
                         <?php if (in_array($field['type'], ['select', 'domain'], true)): ?>
                             <?php if (($field['source'] ?? '') === 'comunas_chile'): ?>
                                 <?php
+                                // Esta parte del código se encarga de usar la vista de comunas de Oracle para el autocompletado.
                                 $comunaOpts = [];
-                                foreach (db_query('SELECT NOMBRE_COMUNA, NOMBRE_REGION FROM LEHZ_VW_COMUNAS_CHILE ORDER BY NOMBRE_REGION, NOMBRE_COMUNA') as $opt) {
+                                foreach (db_rows('LEHZ_PS_LISTAR_COMUNAS_CHILE') as $opt) {
                                     $comunaOpts[] = ['value' => $opt['NOMBRE_COMUNA'], 'label' => $opt['NOMBRE_COMUNA'], 'group' => $opt['NOMBRE_REGION']];
                                 }
                                 ?>
@@ -121,7 +144,7 @@ if ($rows) {
                                     <label class="form-label" for="ac_<?= h($field['name']) ?>"><?= h($field['label']) ?></label>
                                     <div class="position-relative">
                                         <input type="hidden" name="<?= h($field['name']) ?>" id="field_<?= h($field['name']) ?>" value="<?= h(old_value($field['name'])) ?>">
-                                        <input type="text" class="form-control ac-input" id="ac_<?= h($field['name']) ?>" placeholder="Buscar comuna..." autocomplete="off" value="<?= h(old_value($field['name'])) ?>">
+                                        <input type="text" class="form-control ac-input" id="ac_<?= h($field['name']) ?>" placeholder="Buscar comuna..." autocomplete="off" value="<?= h(old_value($field['name'])) ?>" <?= field_required($field) ? 'required' : '' ?>>
                                         <div class="ac-dropdown list-group shadow" id="acdd_<?= h($field['name']) ?>"></div>
                                     </div>
                                     <script>window.LEHZ_AC = window.LEHZ_AC || {}; window.LEHZ_AC['<?= h($field['name']) ?>'] = <?= json_encode($comunaOpts, JSON_UNESCAPED_UNICODE) ?>;</script>
@@ -138,7 +161,7 @@ if ($rows) {
                                         <label class="form-label" for="ac_<?= h($field['name']) ?>"><?= h($field['label']) ?></label>
                                         <div class="position-relative">
                                             <input type="hidden" name="<?= h($field['name']) ?>" id="field_<?= h($field['name']) ?>" value="<?= h(old_value($field['name'])) ?>">
-                                            <input type="text" class="form-control ac-input" id="ac_<?= h($field['name']) ?>" placeholder="Buscar region..." autocomplete="off" value="<?= h(old_value($field['name'])) ?>">
+                                            <input type="text" class="form-control ac-input" id="ac_<?= h($field['name']) ?>" placeholder="Buscar region..." autocomplete="off" value="<?= h(old_value($field['name'])) ?>" <?= field_required($field) ? 'required' : '' ?>>
                                             <div class="ac-dropdown list-group shadow" id="acdd_<?= h($field['name']) ?>"></div>
                                         </div>
                                         <script>window.LEHZ_AC = window.LEHZ_AC || {}; window.LEHZ_AC['<?= h($field['name']) ?>'] = <?= json_encode($regionOpts, JSON_UNESCAPED_UNICODE) ?>;</script>
@@ -146,7 +169,7 @@ if ($rows) {
                                 <?php else: ?>
                                     <div class="col-md-6">
                                         <label class="form-label" for="field_<?= h($field['name']) ?>"><?= h($field['label']) ?></label>
-                                        <select class="form-select" name="<?= h($field['name']) ?>" id="field_<?= h($field['name']) ?>">
+                                        <select class="form-select" name="<?= h($field['name']) ?>" id="field_<?= h($field['name']) ?>" <?= field_required($field) ? 'required' : '' ?>>
                                             <option value="">Seleccione...</option>
                                             <?php foreach (field_options($field) as $option): ?>
                                                 <option value="<?= h($option['value']) ?>" <?= (string)old_value($field['name']) === (string)$option['value'] ? 'selected' : '' ?>><?= h($option['label']) ?></option>
@@ -158,7 +181,7 @@ if ($rows) {
                         <?php elseif ($field['type'] === 'textarea'): ?>
                             <div class="col-12">
                                 <label class="form-label" for="field_<?= h($field['name']) ?>"><?= h($field['label']) ?></label>
-                                <textarea class="form-control" name="<?= h($field['name']) ?>" id="field_<?= h($field['name']) ?>" rows="3"><?= h(old_value($field['name'])) ?></textarea>
+                                <textarea class="form-control" name="<?= h($field['name']) ?>" id="field_<?= h($field['name']) ?>" rows="3" <?= field_required($field) ? 'required' : '' ?>><?= h(old_value($field['name'])) ?></textarea>
                             </div>
                         <?php else: ?>
                             <?php
@@ -196,7 +219,7 @@ if ($rows) {
                                             <option value="600" <?= $prefix === '600' ? 'selected' : '' ?>>600</option>
                                             <option value="809" <?= $prefix === '809' ? 'selected' : '' ?>>809</option>
                                         </select>
-                                        <input class="form-control" type="tel" id="num_<?= h($field['name']) ?>" placeholder="912345678" maxlength="9" value="<?= h($num) ?>" data-phone-number="1" required>
+                                        <input class="form-control" type="tel" id="num_<?= h($field['name']) ?>" placeholder="912345678" maxlength="9" value="<?= h($num) ?>" data-phone-number="1" <?= field_required($field) ? 'required' : '' ?>>
                                         <input type="hidden" name="<?= h($field['name']) ?>" id="field_<?= h($field['name']) ?>" value="<?= h($pv) ?>">
                                     </div>
                                 </div>
@@ -205,7 +228,7 @@ if ($rows) {
                                     <label class="form-label" for="field_<?= h($field['name']) ?>"><?= h($field['label']) ?></label>
                                     <input class="form-control" type="<?= h($inputType) ?>" name="<?= h($field['name']) ?>" id="field_<?= h($field['name']) ?>"
                                            placeholder="<?= h($field['placeholder'] ?? '') ?>"<?= $extra ?>
-                                           value="<?= h(old_value($field['name'])) ?>">
+                                           value="<?= h(old_value($field['name'])) ?>" <?= field_required($field) ? 'required' : '' ?>>
                                 </div>
                             <?php endif; ?>
                         <?php endif; ?>

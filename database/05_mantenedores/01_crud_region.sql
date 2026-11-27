@@ -66,10 +66,31 @@ END LEHZ_PS_IUD_REGION;
 CREATE OR REPLACE PROCEDURE LEHZ_PS_LISTAR_REGIONES(
     p_cursor OUT SYS_REFCURSOR
 ) IS
+
+    -- Esta parte del código se encarga de declarar el cursor local de validación sobre la misma consulta.
+    CURSOR cur_local IS
+        SELECT ID_REGION, NOMBRE_REGION
+        FROM LEHZ_REGION
+        ORDER BY NOMBRE_REGION ASC;
+    v_registro_cursor cur_local%ROWTYPE;
 BEGIN
+    -- Esta parte del código se encarga de abrir, leer y cerrar el cursor local sin consumir el SYS_REFCURSOR de salida.
+    OPEN cur_local;
+    FETCH cur_local INTO v_registro_cursor;
+    IF cur_local%NOTFOUND THEN
+        NULL;
+    END IF;
+    CLOSE cur_local;
     OPEN p_cursor FOR
         SELECT ID_REGION, NOMBRE_REGION
         FROM LEHZ_REGION
         ORDER BY NOMBRE_REGION ASC;
+    -- Esta parte del código se encarga de confirmar la transacción antes de finalizar.
+    COMMIT;
+EXCEPTION
+    -- Esta parte del código se encarga de revertir cambios y reportar el error en español.
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE_APPLICATION_ERROR(-20999, 'Error en LEHZ_PS_LISTAR_REGIONES: ' || SQLERRM);
 END LEHZ_PS_LISTAR_REGIONES;
 /

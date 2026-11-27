@@ -165,14 +165,20 @@ El archivo `docker-compose.yml` junto con el `Dockerfile` levantan automáticame
 2. Abrir el panel de **Extensiones** (`Ctrl + Shift + X`), buscar **`Oracle SQL Developer for VSCode`** (autor: **Oracle Corporation**) e instalarla.
 3. El contenedor **no publica el puerto `1521` en Windows**. Para ejecutar scripts usa SQL*Plus dentro del contenedor:
    ```powershell
-   Get-Content .\database\04_migracion\08_verificacion.sql | docker exec -i oracle-lehz sqlplus -s LEHZ/Lehz1234@localhost:1521/FREEPDB1
+   docker exec oracle-lehz sqlplus -s -S LEHZ/Lehz1234@localhost:1521/FREEPDB1
    ```
-   Para conectarte con SQL Developer desde otro contenedor usa host `oracle-db`, puerto `1521`, servicio `FREEPDB1`, usuario `LEHZ` y contraseña `Lehz1234`. Desde Windows, si necesitas GUI, usa un túnel SSH en lugar de publicar el puerto.
-4. Ejecutar en orden los scripts de la carpeta `database/` dentro del contenedor (`01_tablas` → `02_secuencias` → `03_seguridad` → `04_triggers` → `05_mantenedores` → `06_gestores` → `07_reportes` → `08_datos_prueba`).
+   Después de instalar verifica con `SELECT 'INVALID=' || COUNT(*) FROM USER_OBJECTS WHERE STATUS='INVALID';` (debe dar 0). Para conectarte con SQL Developer desde otro contenedor usa host `oracle-db`, puerto `1521`, servicio `FREEPDB1`, usuario `LEHZ` y contraseña `Lehz1234`. Desde Windows, si necesitas GUI, usa un túnel SSH en lugar de publicar el puerto.
+4. Ejecutar el instalador único, que limpia objetos heredados y carga todo en orden:
+   ```powershell
+   docker cp .\database\. oracle-lehz:/tmp/lehz_database
+   docker exec -w /tmp/lehz_database oracle-lehz sqlplus -s -S LEHZ/Lehz1234@localhost:1521/FREEPDB1 @/tmp/lehz_database/00_instalacion_completa.sql
+   ```
+   El script incluye drops de todos los objetos, catálogo, secuencias, seguridad, funciones, mantenedores, gestores, reportes, triggers y semilla con fechas relativas, y termina con `PURGE RECYCLEBIN`. Al terminar deben quedar 22 tablas, 22 PK, 27 FK, 9 UNIQUE, 57 procedures, 38 funciones, 51 triggers, 14 secuencias y 0 objetos inválidos. Al terminar deben quedar 22 tablas y 0 objetos inválidos. Las carpetas están ordenadas por creación: `01_tablas`, `02_secuencias`, `03_seguridad`, `04_funciones`, `05_mantenedores`, `06_gestores`, `07_reportes`, `08_triggers`, `09_datos_prueba`. Todos los archivos con formato `0x_y` se unieron en su base: `08_triggers/01_drop_triggers.sql` y `08_triggers/02_create_triggers.sql`. Ya no existen `01_1`, `01_2`, `02_1`, `02_2` ni `02_3`. Mantenedores, gestores y reportes conservan un archivo por objeto.
+   * Si necesitas ejecutar scripts individuales, el orden es `08_triggers/01_drop_triggers.sql` → `07_reportes/Drops` → `06_gestores/Drop` → `05_mantenedores/drop` → `04_funciones/01_drop_funciones.sql` → `03_seguridad/01_drop_seguridad.sql` → `01_tablas/01_drop_tables.sql` → `02_secuencias/01_drop_sequences.sql` → `01_tablas/02_create_tables.sql` → `01_tablas/03_cat_chile.sql` → `02_secuencias/02_create_sequences.sql` → `03_seguridad/02_create_seguridad.sql` → `04_funciones/02_create_funciones.sql` → `05_mantenedores` → `06_gestores` → `07_reportes` → `08_triggers/02_create_triggers.sql` → `09_datos_prueba/01_seed_datos.sql`.
    * Dentro de `01_tablas`, ejecuta `01_drop_tables.sql`, `02_create_tables.sql` y luego **`03_cat_chile.sql`** (catálogo fijo de 16 regiones y 346 comunas).
-   * Las carpetas `04_triggers`, `05_mantenedores`, `06_gestores`, `07_reportes` y `08_datos_prueba` incluyen sus respectivos `drop/` para poder reinstalar sin errores.
+   * La correspondencia con la material de la catedra esta en `docs/material_referencia/CORRESPONDENCIA_MATERIAL.md`.
 
-> **Si vienes de una instalación anterior con `LEHZ` incompleto**, aplica además la migración documentada en `database/04_migracion/README.md`. La interfaz usa `DB_USER=LEHZ` por defecto; no definas `DB_USER=LEHZTEST` salvo que quieras probar contra el esquema de validación.
+> La interfaz usa `DB_USER=LEHZ` por defecto; no definas `DB_USER=LEHZTEST` salvo que quieras probar contra el esquema de validación.
 
 ---
 
@@ -272,13 +278,15 @@ PROYECTO-FINAL-BASE-DE-DATOS/
 │   ├── 01_tablas/         # Drops, creación de tablas y catálogo de Chile
 │   ├── 02_secuencias/     # Secuencias para llaves primarias
 │   ├── 03_seguridad/      # Usuarios, roles y autenticación
-│   ├── 04_triggers/       # Disparadores de monitoreo y validación (+ drop/)
-│   ├── 05_mantenedores/   # 10 CRUDs con PA, funciones y cursores (+ drop/)
-│   ├── 06_gestores/       # 5 módulos transaccionales (+ Drop/)
-│   ├── 07_reportes/       # 4 reportes estratégicos (+ Drops/)
-│   ├── 08_datos_prueba/   # Carga de datos reales para demostración (+ Drops/)
-│   └── 04_migracion/      # Migración LEHZTEST → LEHZ y respaldos LEHZ_BAK_*
-├── docs/                  # Diagrama 3FN, presentación PPT y video demo
+│   ├── 04_funciones/      # 01 drop y 02 create de las 31 funciones centralizadas
+│   ├── 05_mantenedores/   # 12 CRUDs con PA, funciones y cursores (+ drop/)
+│   ├── 06_gestores/       # 8 módulos transaccionales (+ Drop/)
+│   ├── 07_reportes/       # 3 reportes estratégicos + 1 operativo (+ Drops/)
+│   ├── 08_triggers/       # Disparadores de dominio, monitoreo y auditoría
+│   ├── 09_datos_prueba/   # Carga de datos reales para demostración (+ Drops/)
+│   ├── 00_instalacion_completa.sql # Instalador único y ordenado
+│   └── 00_limpieza_legacy.sql # Limpieza opcional de restos heredados
+├── docs/                  # Modelo 3FN, material de referencia INF314/INF324, PPT, guion y traza
 ├── Dockerfile             # Construcción del contenedor PHP 8 + extensión OCI8
 ├── docker-compose.yml     # Orquestación de contenedores (Oracle + Web PHP)
 └── README.md              # Guía de instalación, actualización y flujo Git

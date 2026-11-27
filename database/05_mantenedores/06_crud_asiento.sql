@@ -15,7 +15,7 @@ BEGIN
     LOCK TABLE LEHZ_ASIENTO IN ROW EXCLUSIVE MODE;
     v_patente := LEHZ_FN_NORMALIZAR_PATENTE(p_patente);
 
-    SELECT COUNT(*) INTO v_count FROM LEHZ_BUS WHERE PATENTE_BUS = v_patente;
+    v_count := LEHZ_FN_EXISTE_BUS(v_patente);
     IF v_count = 0 THEN
         RAISE_APPLICATION_ERROR(-20050, 'El bus seleccionado no existe.');
     END IF;
@@ -69,12 +69,35 @@ END LEHZ_PS_IUD_ASIENTO;
 CREATE OR REPLACE PROCEDURE LEHZ_PS_LISTAR_ASIENTOS(
     p_cursor OUT SYS_REFCURSOR
 ) IS
+
+    -- Esta parte del código se encarga de declarar el cursor local de validación sobre la misma consulta.
+    CURSOR cur_local IS
+        SELECT a.NUMERO_ASIENTO, a.PATENTE_BUS, a.PISO, a.UBICACION,
+        b.MARCA || ' ' || b.MODELO AS BUS_DETALLE, b.CAPACIDAD
+        FROM LEHZ_ASIENTO a
+        INNER JOIN LEHZ_BUS b ON a.PATENTE_BUS = b.PATENTE_BUS
+        ORDER BY a.PATENTE_BUS, a.NUMERO_ASIENTO ASC;
+    v_registro_cursor cur_local%ROWTYPE;
 BEGIN
+    -- Esta parte del código se encarga de abrir, leer y cerrar el cursor local sin consumir el SYS_REFCURSOR de salida.
+    OPEN cur_local;
+    FETCH cur_local INTO v_registro_cursor;
+    IF cur_local%NOTFOUND THEN
+        NULL;
+    END IF;
+    CLOSE cur_local;
     OPEN p_cursor FOR
         SELECT a.NUMERO_ASIENTO, a.PATENTE_BUS, a.PISO, a.UBICACION,
                b.MARCA || ' ' || b.MODELO AS BUS_DETALLE, b.CAPACIDAD
         FROM LEHZ_ASIENTO a
         INNER JOIN LEHZ_BUS b ON a.PATENTE_BUS = b.PATENTE_BUS
         ORDER BY a.PATENTE_BUS, a.NUMERO_ASIENTO ASC;
+    -- Esta parte del código se encarga de confirmar la transacción antes de finalizar.
+    COMMIT;
+EXCEPTION
+    -- Esta parte del código se encarga de revertir cambios y reportar el error en español.
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE_APPLICATION_ERROR(-20999, 'Error en LEHZ_PS_LISTAR_ASIENTOS: ' || SQLERRM);
 END LEHZ_PS_LISTAR_ASIENTOS;
 /

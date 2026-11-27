@@ -30,7 +30,7 @@ BEGIN
         IF p_id_comuna IS NULL OR p_id_comuna <= 0 THEN
             RAISE_APPLICATION_ERROR(-20024, 'Debe seleccionar una comuna valida.');
         END IF;
-        SELECT COUNT(*) INTO v_count FROM LEHZ_COMUNA WHERE ID_COMUNA = p_id_comuna;
+        v_count := LEHZ_FN_EXISTE_COMUNA(p_id_comuna);
         IF v_count = 0 THEN
             RAISE_APPLICATION_ERROR(-20024, 'La comuna seleccionada no existe.');
         END IF;
@@ -86,7 +86,24 @@ END LEHZ_PS_IUD_TERMINAL;
 CREATE OR REPLACE PROCEDURE LEHZ_PS_LISTAR_TERMINALES(
     p_cursor OUT SYS_REFCURSOR
 ) IS
+
+    -- Esta parte del código se encarga de declarar el cursor local de validación sobre la misma consulta.
+    CURSOR cur_local IS
+        SELECT t.ID_TERMINAL, t.NOMBRE, t.CALLE, t.NUMERO, t.ID_COMUNA,
+        c.NOMBRE_COMUNA, r.NOMBRE_REGION
+        FROM LEHZ_TERMINAL t
+        INNER JOIN LEHZ_COMUNA c ON t.ID_COMUNA = c.ID_COMUNA
+        INNER JOIN LEHZ_REGION r ON c.ID_REGION = r.ID_REGION
+        ORDER BY r.NOMBRE_REGION ASC, c.NOMBRE_COMUNA ASC, t.NOMBRE ASC;
+    v_registro_cursor cur_local%ROWTYPE;
 BEGIN
+    -- Esta parte del código se encarga de abrir, leer y cerrar el cursor local sin consumir el SYS_REFCURSOR de salida.
+    OPEN cur_local;
+    FETCH cur_local INTO v_registro_cursor;
+    IF cur_local%NOTFOUND THEN
+        NULL;
+    END IF;
+    CLOSE cur_local;
     OPEN p_cursor FOR
         SELECT t.ID_TERMINAL, t.NOMBRE, t.CALLE, t.NUMERO, t.ID_COMUNA,
                c.NOMBRE_COMUNA, r.NOMBRE_REGION
@@ -94,5 +111,12 @@ BEGIN
         INNER JOIN LEHZ_COMUNA c ON t.ID_COMUNA = c.ID_COMUNA
         INNER JOIN LEHZ_REGION r ON c.ID_REGION = r.ID_REGION
         ORDER BY r.NOMBRE_REGION ASC, c.NOMBRE_COMUNA ASC, t.NOMBRE ASC;
+    -- Esta parte del código se encarga de confirmar la transacción antes de finalizar.
+    COMMIT;
+EXCEPTION
+    -- Esta parte del código se encarga de revertir cambios y reportar el error en español.
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE_APPLICATION_ERROR(-20999, 'Error en LEHZ_PS_LISTAR_TERMINALES: ' || SQLERRM);
 END LEHZ_PS_LISTAR_TERMINALES;
 /

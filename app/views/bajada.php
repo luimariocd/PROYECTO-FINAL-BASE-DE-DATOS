@@ -45,14 +45,15 @@ $bajadas = db_rows('LEHZ_PS_GES_LISTAR_BAJADAS');
 </div>
 
 <div class="card mb-4">
-    <div class="card-header">
+    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
         <h3 class="card-title mb-0">Bajadas registradas</h3>
+        <input class="form-control filter-input" type="search" data-filter="bajadasBody" placeholder="Filtrar bajadas..." aria-label="Filtrar bajadas" style="max-width: 18rem;">
     </div>
     <div class="card-body p-0">
         <div class="table-responsive">
             <table class="table table-striped table-hover align-middle mb-0">
                 <thead><tr><th>ID bajada</th><th>Boleto</th><th>Terminal</th><th>Observacion</th><th>Fecha registro</th></tr></thead>
-                <tbody>
+                <tbody id="bajadasBody">
                 <?php foreach ($bajadas as $b): ?>
                     <tr>
                         <td><?= h($b['ID_BAJADA']) ?></td>

@@ -18,16 +18,7 @@ BEGIN
             RAISE_APPLICATION_ERROR(-20022, 'El nombre de la comuna es obligatorio.');
         END IF;
 
-        BEGIN
-            SELECT r.ID_REGION
-              INTO v_id_region
-              FROM LEHZ_VW_COMUNAS_CHILE_ALL c
-              JOIN LEHZ_REGION r ON UPPER(r.NOMBRE_REGION) = UPPER(c.NOMBRE_REGION)
-             WHERE UPPER(c.NOMBRE_COMUNA) = UPPER(v_nombre);
-        EXCEPTION
-            WHEN NO_DATA_FOUND THEN
-                RAISE_APPLICATION_ERROR(-20022, 'La comuna seleccionada no existe en el catalogo de Chile o su region no esta cargada.');
-        END;
+        v_id_region := LEHZ_FN_OBTENER_ID_REGION_COMUNA(v_nombre);
     END IF;
 
     IF UPPER(TRIM(p_opcion)) = 'I' THEN
@@ -78,11 +69,33 @@ END LEHZ_PS_IUD_COMUNA;
 CREATE OR REPLACE PROCEDURE LEHZ_PS_LISTAR_COMUNAS(
     p_cursor OUT SYS_REFCURSOR
 ) IS
+
+    -- Esta parte del código se encarga de declarar el cursor local de validación sobre la misma consulta.
+    CURSOR cur_local IS
+        SELECT c.ID_COMUNA, c.NOMBRE_COMUNA, c.ID_REGION, r.NOMBRE_REGION
+        FROM LEHZ_COMUNA c
+        INNER JOIN LEHZ_REGION r ON c.ID_REGION = r.ID_REGION
+        ORDER BY r.NOMBRE_REGION ASC, c.NOMBRE_COMUNA ASC;
+    v_registro_cursor cur_local%ROWTYPE;
 BEGIN
+    -- Esta parte del código se encarga de abrir, leer y cerrar el cursor local sin consumir el SYS_REFCURSOR de salida.
+    OPEN cur_local;
+    FETCH cur_local INTO v_registro_cursor;
+    IF cur_local%NOTFOUND THEN
+        NULL;
+    END IF;
+    CLOSE cur_local;
     OPEN p_cursor FOR
         SELECT c.ID_COMUNA, c.NOMBRE_COMUNA, c.ID_REGION, r.NOMBRE_REGION
         FROM LEHZ_COMUNA c
         INNER JOIN LEHZ_REGION r ON c.ID_REGION = r.ID_REGION
         ORDER BY r.NOMBRE_REGION ASC, c.NOMBRE_COMUNA ASC;
+    -- Esta parte del código se encarga de confirmar la transacción antes de finalizar.
+    COMMIT;
+EXCEPTION
+    -- Esta parte del código se encarga de revertir cambios y reportar el error en español.
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE_APPLICATION_ERROR(-20999, 'Error en LEHZ_PS_LISTAR_COMUNAS: ' || SQLERRM);
 END LEHZ_PS_LISTAR_COMUNAS;
 /

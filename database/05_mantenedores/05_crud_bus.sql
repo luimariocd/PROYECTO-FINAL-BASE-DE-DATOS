@@ -40,7 +40,7 @@ BEGIN
             RAISE_APPLICATION_ERROR(-20040, 'La tarifa base debe ser mayor que cero.');
         END IF;
 
-        SELECT COUNT(*) INTO v_count FROM LEHZ_EMPRESA WHERE RUT_EMPRESA = v_rut;
+        v_count := LEHZ_FN_EXISTE_EMPRESA(v_rut);
         IF v_count = 0 THEN
             RAISE_APPLICATION_ERROR(-20040, 'La empresa seleccionada no existe.');
         END IF;
@@ -56,10 +56,7 @@ BEGIN
         );
 
     ELSIF UPPER(TRIM(p_opcion)) = 'U' THEN
-        SELECT COUNT(*) INTO v_count
-          FROM LEHZ_ASIENTO
-         WHERE PATENTE_BUS = v_patente;
-        IF p_capacidad < v_count THEN
+        v_count := LEHZ_FN_CONTAR_ASIENTOS(v_patente);        IF p_capacidad < v_count THEN
             RAISE_APPLICATION_ERROR(-20040, 'La capacidad no puede ser menor que los ' || v_count || ' asientos ya registrados.');
         END IF;
 
@@ -105,7 +102,24 @@ END LEHZ_PS_IUD_BUS;
 CREATE OR REPLACE PROCEDURE LEHZ_PS_LISTAR_BUSES(
     p_cursor OUT SYS_REFCURSOR
 ) IS
+
+    -- Esta parte del código se encarga de declarar el cursor local de validación sobre la misma consulta.
+    CURSOR cur_local IS
+        SELECT b.PATENTE_BUS, b.MARCA, b.MODELO, b.ANIO_FABRICACION, b.CAPACIDAD,
+        b.TIPO_SERVICIO, b.CANTIDAD_PISOS, b.TARIFA_BASE,
+        b.RUT_EMPRESA, e.RAZON_SOCIAL AS NOMBRE_EMPRESA
+        FROM LEHZ_BUS b
+        INNER JOIN LEHZ_EMPRESA e ON b.RUT_EMPRESA = e.RUT_EMPRESA
+        ORDER BY b.PATENTE_BUS ASC;
+    v_registro_cursor cur_local%ROWTYPE;
 BEGIN
+    -- Esta parte del código se encarga de abrir, leer y cerrar el cursor local sin consumir el SYS_REFCURSOR de salida.
+    OPEN cur_local;
+    FETCH cur_local INTO v_registro_cursor;
+    IF cur_local%NOTFOUND THEN
+        NULL;
+    END IF;
+    CLOSE cur_local;
     OPEN p_cursor FOR
         SELECT b.PATENTE_BUS, b.MARCA, b.MODELO, b.ANIO_FABRICACION, b.CAPACIDAD,
                b.TIPO_SERVICIO, b.CANTIDAD_PISOS, b.TARIFA_BASE,
@@ -113,5 +127,12 @@ BEGIN
         FROM LEHZ_BUS b
         INNER JOIN LEHZ_EMPRESA e ON b.RUT_EMPRESA = e.RUT_EMPRESA
         ORDER BY b.PATENTE_BUS ASC;
+    -- Esta parte del código se encarga de confirmar la transacción antes de finalizar.
+    COMMIT;
+EXCEPTION
+    -- Esta parte del código se encarga de revertir cambios y reportar el error en español.
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE_APPLICATION_ERROR(-20999, 'Error en LEHZ_PS_LISTAR_BUSES: ' || SQLERRM);
 END LEHZ_PS_LISTAR_BUSES;
 /

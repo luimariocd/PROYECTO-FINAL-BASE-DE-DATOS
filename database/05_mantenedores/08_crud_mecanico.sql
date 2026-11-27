@@ -31,7 +31,7 @@ BEGIN
         IF p_especialidad IS NULL OR TRIM(p_especialidad) = '' THEN
             RAISE_APPLICATION_ERROR(-20070, 'La especialidad del mecanico es obligatoria.');
         END IF;
-        SELECT COUNT(*) INTO v_count FROM LEHZ_EMPRESA WHERE RUT_EMPRESA = v_rut_emp;
+        v_count := LEHZ_FN_EXISTE_EMPRESA(v_rut_emp);
         IF v_count = 0 THEN
             RAISE_APPLICATION_ERROR(-20070, 'La empresa seleccionada no existe.');
         END IF;
@@ -88,7 +88,24 @@ END LEHZ_PS_IUD_MECANICO;
 CREATE OR REPLACE PROCEDURE LEHZ_PS_LISTAR_MECANICOS(
     p_cursor OUT SYS_REFCURSOR
 ) IS
+
+    -- Esta parte del código se encarga de declarar el cursor local de validación sobre la misma consulta.
+    CURSOR cur_local IS
+        SELECT m.RUT_MECANICO, m.NOMBRE_MECANICO, m.APELLIDO1_MECANICO,
+        m.APELLIDO2_MECANICO, m.TELEFONO, m.ESPECIALIDAD,
+        m.RUT_EMPRESA, e.RAZON_SOCIAL AS NOMBRE_EMPRESA
+        FROM LEHZ_MECANICO m
+        INNER JOIN LEHZ_EMPRESA e ON m.RUT_EMPRESA = e.RUT_EMPRESA
+        ORDER BY m.APELLIDO1_MECANICO ASC, m.APELLIDO2_MECANICO ASC;
+    v_registro_cursor cur_local%ROWTYPE;
 BEGIN
+    -- Esta parte del código se encarga de abrir, leer y cerrar el cursor local sin consumir el SYS_REFCURSOR de salida.
+    OPEN cur_local;
+    FETCH cur_local INTO v_registro_cursor;
+    IF cur_local%NOTFOUND THEN
+        NULL;
+    END IF;
+    CLOSE cur_local;
     OPEN p_cursor FOR
         SELECT m.RUT_MECANICO, m.NOMBRE_MECANICO, m.APELLIDO1_MECANICO,
                m.APELLIDO2_MECANICO, m.TELEFONO, m.ESPECIALIDAD,
@@ -96,5 +113,12 @@ BEGIN
         FROM LEHZ_MECANICO m
         INNER JOIN LEHZ_EMPRESA e ON m.RUT_EMPRESA = e.RUT_EMPRESA
         ORDER BY m.APELLIDO1_MECANICO ASC, m.APELLIDO2_MECANICO ASC;
+    -- Esta parte del código se encarga de confirmar la transacción antes de finalizar.
+    COMMIT;
+EXCEPTION
+    -- Esta parte del código se encarga de revertir cambios y reportar el error en español.
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE_APPLICATION_ERROR(-20999, 'Error en LEHZ_PS_LISTAR_MECANICOS: ' || SQLERRM);
 END LEHZ_PS_LISTAR_MECANICOS;
 /

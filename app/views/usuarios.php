@@ -53,8 +53,9 @@ $usuarios = db_rows('LEHZ_PS_LISTAR_USUARIOS');
 </div>
 
 <div class="card mb-4">
-    <div class="card-header">
+    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
         <h3 class="card-title mb-0">Usuarios del sistema</h3>
+        <input class="form-control filter-input" type="search" data-filter="usuariosBody" placeholder="Filtrar usuarios..." aria-label="Filtrar usuarios" style="max-width: 18rem;">
     </div>
     <div class="card-body p-0">
         <div class="table-responsive">
@@ -62,7 +63,7 @@ $usuarios = db_rows('LEHZ_PS_LISTAR_USUARIOS');
                 <thead>
                     <tr><th>ID</th><th>Usuario</th><th>Nombre</th><th>Correo</th><th>Rol</th><th>Estado</th><th>Creado</th><th class="text-end">Acciones</th></tr>
                 </thead>
-                <tbody>
+                <tbody id="usuariosBody">
                 <?php foreach ($usuarios as $u): ?>
                     <tr>
                         <td><?= h($u['ID_USUARIO']) ?></td>

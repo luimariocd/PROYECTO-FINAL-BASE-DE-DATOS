@@ -257,11 +257,48 @@
     });
 })();
 
+    function filterTableRows(target, q) {
+        var body = target.tagName === 'TBODY' ? target : (target.tBodies[0] || target);
+        if (!body || !body.querySelectorAll) return;
+        var rows = Array.prototype.filter.call(body.querySelectorAll('tr'), function (row) {
+            return !row.hasAttribute('data-filter-empty');
+        });
+        var empty = body.querySelector('[data-filter-empty]');
+        var visible = 0;
+        rows.forEach(function (row) {
+            var show = q === '' || row.textContent.toLowerCase().indexOf(q) !== -1;
+            row.hidden = !show;
+            if (show) visible++;
+        });
+        if (q !== '' && visible === 0) {
+            if (!empty) {
+                var table = body.closest ? body.closest('table') : null;
+                var total = table ? table.querySelectorAll('thead th').length : 0;
+                if (!total && rows.length) total = rows[0].cells.length;
+                empty = document.createElement('tr');
+                empty.setAttribute('data-filter-empty', '');
+                var cell = document.createElement('td');
+                cell.colSpan = total || 1;
+                cell.className = 'text-center text-body-secondary py-4';
+                cell.textContent = 'Sin resultados para este filtro.';
+                empty.appendChild(cell);
+                body.appendChild(empty);
+            }
+            empty.hidden = false;
+        } else if (empty) {
+            empty.hidden = true;
+        }
+    }
+
     function filterSelect(input) {
         var target = document.getElementById(input.getAttribute('data-filter'));
         if (!target) return;
-        if (!target._originalHTML) target._originalHTML = target.innerHTML;
         var q = input.value.trim().toLowerCase();
+        if (target.tagName === 'TBODY' || target.tagName === 'TABLE') {
+            filterTableRows(target, q);
+            return;
+        }
+        if (!target._originalHTML) target._originalHTML = target.innerHTML;
         if (q === '') {
             target.innerHTML = target._originalHTML;
             return;

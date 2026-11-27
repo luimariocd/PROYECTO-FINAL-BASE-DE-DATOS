@@ -285,14 +285,15 @@ $chartId = 'lehzline_' . preg_replace('/[^a-z0-9]/', '', strtolower($report['tit
 <?php endif; ?>
 
 <div class="card mb-4">
-    <div class="card-header">
+    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
         <h5 class="card-title mb-0"><i class="bi bi-table me-2 text-secondary"></i>Detalle</h5>
+        <input class="form-control filter-input" type="search" data-filter="reportBody" placeholder="Filtrar detalle..." aria-label="Filtrar detalle" style="max-width: 18rem;">
     </div>
     <div class="card-body p-0">
         <div class="table-responsive">
             <table class="table table-striped table-hover align-middle mb-0">
                 <thead><tr><?php foreach ($columns as $col): ?><th><?= h(column_label($col)) ?></th><?php endforeach; ?></tr></thead>
-                <tbody>
+                <tbody id="reportBody">
                 <?php foreach ($rows as $row): ?>
                     <tr>
                         <?php foreach ($columns as $col): ?><td><?= h(format_cell($col, $row[$col] ?? null)) ?></td><?php endforeach; ?>

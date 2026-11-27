@@ -6,14 +6,14 @@ $mantenciones = db_rows('LEHZ_PS_LISTAR_MANTENCIONES');
 <div class="card mb-4">
     <div class="card-header">
         <h3 class="card-title mb-0">Registrar mantencion</h3>
-        <div class="text-body-secondary small mt-1">Oracle bloquea fechas futuras y buses asignados a un viaje ese dia.</div>
+        <div class="text-body-secondary small mt-1">Solo se registran mantenciones de hoy o anteriores; Oracle bloquea buses asignados a un viaje ese dia.</div>
     </div>
     <div class="card-body">
         <form method="post" class="row g-3">
             <input type="hidden" name="action" value="mantencion">
             <div class="col-md-6">
                 <label class="form-label" for="mantFecha">Fecha</label>
-                <input class="form-control" type="date" id="mantFecha" name="fecha" required min="<?= date('Y-m-d') ?>" value="<?= h(old_value('fecha')) ?>">
+                <input class="form-control" type="date" id="mantFecha" name="fecha" required max="<?= date('Y-m-d') ?>" value="<?= h(old_value('fecha', date('Y-m-d'))) ?>">
             </div>
             <div class="col-md-6">
                 <label class="form-label" for="mantCosto">Costo</label>

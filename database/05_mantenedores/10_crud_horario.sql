@@ -74,7 +74,31 @@ END LEHZ_PS_IUD_HORARIO;
 CREATE OR REPLACE PROCEDURE LEHZ_PS_LISTAR_HORARIOS(
     p_cursor OUT SYS_REFCURSOR
 ) IS
+
+    -- Esta parte del código se encarga de declarar el cursor local de validación sobre la misma consulta.
+    CURSOR cur_local IS
+        SELECT ID_HORARIO, HORARIO,
+        TO_CHAR(HORA_SALIDA, 'YYYY-MM-DD"T"HH24:MI') AS HORA_SALIDA,
+        TO_CHAR(HORA_SALIDA, 'DD/MM/YYYY HH24:MI') AS HORA_SALIDA_TEXTO,
+        TO_CHAR(HORA_LLEGADA, 'YYYY-MM-DD"T"HH24:MI') AS HORA_LLEGADA,
+        TO_CHAR(HORA_LLEGADA, 'DD/MM/YYYY HH24:MI') AS HORA_LLEGADA_TEXTO,
+        TO_CHAR(HORA_SALIDA, 'HH24:MI') || ' - ' || TO_CHAR(HORA_LLEGADA, 'HH24:MI') AS RANGO,
+        CASE
+        WHEN TO_NUMBER(TO_CHAR(HORA_SALIDA, 'HH24')) < 12 THEN 'MANANA'
+        WHEN TO_NUMBER(TO_CHAR(HORA_SALIDA, 'HH24')) < 19 THEN 'TARDE'
+        ELSE 'NOCHE'
+        END AS JORNADA
+        FROM LEHZ_HORARIO
+        ORDER BY HORA_SALIDA ASC;
+    v_registro_cursor cur_local%ROWTYPE;
 BEGIN
+    -- Esta parte del código se encarga de abrir, leer y cerrar el cursor local sin consumir el SYS_REFCURSOR de salida.
+    OPEN cur_local;
+    FETCH cur_local INTO v_registro_cursor;
+    IF cur_local%NOTFOUND THEN
+        NULL;
+    END IF;
+    CLOSE cur_local;
     OPEN p_cursor FOR
         SELECT ID_HORARIO, HORARIO,
                TO_CHAR(HORA_SALIDA, 'YYYY-MM-DD"T"HH24:MI') AS HORA_SALIDA,
@@ -89,5 +113,12 @@ BEGIN
                END AS JORNADA
         FROM LEHZ_HORARIO
         ORDER BY HORA_SALIDA ASC;
+    -- Esta parte del código se encarga de confirmar la transacción antes de finalizar.
+    COMMIT;
+EXCEPTION
+    -- Esta parte del código se encarga de revertir cambios y reportar el error en español.
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE_APPLICATION_ERROR(-20999, 'Error en LEHZ_PS_LISTAR_HORARIOS: ' || SQLERRM);
 END LEHZ_PS_LISTAR_HORARIOS;
 /

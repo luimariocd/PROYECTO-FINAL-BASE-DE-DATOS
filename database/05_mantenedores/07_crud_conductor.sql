@@ -35,7 +35,7 @@ BEGIN
         IF p_tipo_licencia IS NULL OR UPPER(TRIM(p_tipo_licencia)) NOT IN ('A1', 'A2', 'A3') THEN
             RAISE_APPLICATION_ERROR(-20060, 'Tipo de licencia invalido: debe ser A1, A2 o A3.');
         END IF;
-        SELECT COUNT(*) INTO v_count FROM LEHZ_EMPRESA WHERE RUT_EMPRESA = v_rut_emp;
+        v_count := LEHZ_FN_EXISTE_EMPRESA(v_rut_emp);
         IF v_count = 0 THEN
             RAISE_APPLICATION_ERROR(-20060, 'La empresa seleccionada no existe.');
         END IF;
@@ -93,7 +93,27 @@ END LEHZ_PS_IUD_CONDUCTOR;
 CREATE OR REPLACE PROCEDURE LEHZ_PS_LISTAR_CONDUCTORES(
     p_cursor OUT SYS_REFCURSOR
 ) IS
+
+    -- Esta parte del código se encarga de declarar el cursor local de validación sobre la misma consulta.
+    CURSOR cur_local IS
+        SELECT c.RUT_CONDUCTOR, c.NOMBRE_CONDUCTOR, c.APELLIDO1_CONDUCTOR,
+        c.APELLIDO2_CONDUCTOR, c.TELEFONO, c.TIPO_LICENCIA,
+        TO_CHAR(c.VENCIMIENTO_LICENCIA, 'YYYY-MM-DD') AS VENCIMIENTO_LICENCIA,
+        TO_CHAR(c.VENCIMIENTO_LICENCIA, 'DD/MM/YYYY') AS VENCIMIENTO_TEXTO,
+        c.RUT_EMPRESA,
+        e.RAZON_SOCIAL AS NOMBRE_EMPRESA
+        FROM LEHZ_CONDUCTOR c
+        INNER JOIN LEHZ_EMPRESA e ON c.RUT_EMPRESA = e.RUT_EMPRESA
+        ORDER BY c.APELLIDO1_CONDUCTOR ASC, c.APELLIDO2_CONDUCTOR ASC;
+    v_registro_cursor cur_local%ROWTYPE;
 BEGIN
+    -- Esta parte del código se encarga de abrir, leer y cerrar el cursor local sin consumir el SYS_REFCURSOR de salida.
+    OPEN cur_local;
+    FETCH cur_local INTO v_registro_cursor;
+    IF cur_local%NOTFOUND THEN
+        NULL;
+    END IF;
+    CLOSE cur_local;
     OPEN p_cursor FOR
         SELECT c.RUT_CONDUCTOR, c.NOMBRE_CONDUCTOR, c.APELLIDO1_CONDUCTOR,
                c.APELLIDO2_CONDUCTOR, c.TELEFONO, c.TIPO_LICENCIA,
@@ -104,5 +124,12 @@ BEGIN
         FROM LEHZ_CONDUCTOR c
         INNER JOIN LEHZ_EMPRESA e ON c.RUT_EMPRESA = e.RUT_EMPRESA
         ORDER BY c.APELLIDO1_CONDUCTOR ASC, c.APELLIDO2_CONDUCTOR ASC;
+    -- Esta parte del código se encarga de confirmar la transacción antes de finalizar.
+    COMMIT;
+EXCEPTION
+    -- Esta parte del código se encarga de revertir cambios y reportar el error en español.
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE_APPLICATION_ERROR(-20999, 'Error en LEHZ_PS_LISTAR_CONDUCTORES: ' || SQLERRM);
 END LEHZ_PS_LISTAR_CONDUCTORES;
 /

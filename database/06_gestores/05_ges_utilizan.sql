@@ -16,12 +16,12 @@ BEGIN
         RAISE_APPLICATION_ERROR(-20140, 'Debe seleccionar un terminal valido.');
     END IF;
 
-    SELECT COUNT(*) INTO v_count FROM LEHZ_TERMINAL WHERE ID_TERMINAL = p_id_terminal;
+    v_count := LEHZ_FN_EXISTE_TERMINAL(p_id_terminal);
     IF v_count = 0 THEN
         RAISE_APPLICATION_ERROR(-20141, 'El terminal no existe.');
     END IF;
 
-    SELECT COUNT(*) INTO v_count FROM LEHZ_EMPRESA WHERE RUT_EMPRESA = v_rut;
+    v_count := LEHZ_FN_EXISTE_EMPRESA(v_rut);
     IF v_count = 0 THEN
         RAISE_APPLICATION_ERROR(-20142, 'La empresa no existe.');
     END IF;
@@ -57,7 +57,26 @@ END LEHZ_PS_GES_ASOCIAR_TERMINAL;
 CREATE OR REPLACE PROCEDURE LEHZ_PS_LISTAR_UTILIZAN(
     p_cursor OUT SYS_REFCURSOR
 ) IS
+
+    -- Esta parte del código se encarga de declarar el cursor local de validación sobre la misma consulta.
+    CURSOR cur_local IS
+        SELECT u.ID_TERMINAL, t.NOMBRE AS TERMINAL,
+        c.NOMBRE_COMUNA,
+        u.RUT_EMPRESA, e.RAZON_SOCIAL
+        FROM LEHZ_UTILIZAN u
+        INNER JOIN LEHZ_TERMINAL t ON t.ID_TERMINAL = u.ID_TERMINAL
+        INNER JOIN LEHZ_COMUNA c ON c.ID_COMUNA = t.ID_COMUNA
+        INNER JOIN LEHZ_EMPRESA e ON e.RUT_EMPRESA = u.RUT_EMPRESA
+        ORDER BY e.RAZON_SOCIAL ASC, t.NOMBRE ASC;
+    v_registro_cursor cur_local%ROWTYPE;
 BEGIN
+    -- Esta parte del código se encarga de abrir, leer y cerrar el cursor local sin consumir el SYS_REFCURSOR de salida.
+    OPEN cur_local;
+    FETCH cur_local INTO v_registro_cursor;
+    IF cur_local%NOTFOUND THEN
+        NULL;
+    END IF;
+    CLOSE cur_local;
     OPEN p_cursor FOR
         SELECT u.ID_TERMINAL, t.NOMBRE AS TERMINAL,
                c.NOMBRE_COMUNA,
@@ -67,5 +86,12 @@ BEGIN
         INNER JOIN LEHZ_COMUNA c ON c.ID_COMUNA = t.ID_COMUNA
         INNER JOIN LEHZ_EMPRESA e ON e.RUT_EMPRESA = u.RUT_EMPRESA
         ORDER BY e.RAZON_SOCIAL ASC, t.NOMBRE ASC;
+    -- Esta parte del código se encarga de confirmar la transacción antes de finalizar.
+    COMMIT;
+EXCEPTION
+    -- Esta parte del código se encarga de revertir cambios y reportar el error en español.
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE_APPLICATION_ERROR(-20999, 'Error en LEHZ_PS_LISTAR_UTILIZAN: ' || SQLERRM);
 END LEHZ_PS_LISTAR_UTILIZAN;
 /

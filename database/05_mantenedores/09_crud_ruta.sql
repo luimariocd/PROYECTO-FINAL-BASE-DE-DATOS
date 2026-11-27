@@ -38,11 +38,11 @@ BEGIN
             RAISE_APPLICATION_ERROR(-20080, 'Los minutos estimados deben estar entre 0 y 59.');
         END IF;
 
-        SELECT COUNT(*) INTO v_count FROM LEHZ_TERMINAL WHERE ID_TERMINAL = p_id_terminal_origen;
+        v_count := LEHZ_FN_EXISTE_TERMINAL(p_id_terminal_origen);
         IF v_count = 0 THEN
             RAISE_APPLICATION_ERROR(-20080, 'El terminal de origen no existe.');
         END IF;
-        SELECT COUNT(*) INTO v_count FROM LEHZ_TERMINAL WHERE ID_TERMINAL = p_id_terminal_destino;
+        v_count := LEHZ_FN_EXISTE_TERMINAL(p_id_terminal_destino);
         IF v_count = 0 THEN
             RAISE_APPLICATION_ERROR(-20080, 'El terminal de destino no existe.');
         END IF;
@@ -106,7 +106,30 @@ END LEHZ_PS_IUD_RUTA;
 CREATE OR REPLACE PROCEDURE LEHZ_PS_LISTAR_RUTAS(
     p_cursor OUT SYS_REFCURSOR
 ) IS
+
+    -- Esta parte del código se encarga de declarar el cursor local de validación sobre la misma consulta.
+    CURSOR cur_local IS
+        SELECT r.ID_RUTA, r.NOMBRE_RUTA,
+        TO_CHAR(r.HORARIO, 'YYYY-MM-DD"T"HH24:MI') AS HORARIO,
+        TO_CHAR(r.HORARIO, 'DD/MM/YYYY HH24:MI') AS HORARIO_TEXTO,
+        r.DISTANCIA,
+        r.HORAS_ESTIMADAS, r.MINUTOS_ESTIMADOS,
+        r.ID_TERMINAL_ORIGEN, o.NOMBRE AS TERMINAL_ORIGEN,
+        r.ID_TERMINAL_DESTINO, d.NOMBRE AS TERMINAL_DESTINO,
+        (SELECT COUNT(*) FROM LEHZ_RUTA_PARADA rp WHERE rp.ID_RUTA = r.ID_RUTA) AS TOTAL_PARADAS
+        FROM LEHZ_RUTA r
+        INNER JOIN LEHZ_TERMINAL o ON r.ID_TERMINAL_ORIGEN = o.ID_TERMINAL
+        INNER JOIN LEHZ_TERMINAL d ON r.ID_TERMINAL_DESTINO = d.ID_TERMINAL
+        ORDER BY r.NOMBRE_RUTA ASC;
+    v_registro_cursor cur_local%ROWTYPE;
 BEGIN
+    -- Esta parte del código se encarga de abrir, leer y cerrar el cursor local sin consumir el SYS_REFCURSOR de salida.
+    OPEN cur_local;
+    FETCH cur_local INTO v_registro_cursor;
+    IF cur_local%NOTFOUND THEN
+        NULL;
+    END IF;
+    CLOSE cur_local;
     OPEN p_cursor FOR
         SELECT r.ID_RUTA, r.NOMBRE_RUTA,
                TO_CHAR(r.HORARIO, 'YYYY-MM-DD"T"HH24:MI') AS HORARIO,
@@ -120,5 +143,12 @@ BEGIN
         INNER JOIN LEHZ_TERMINAL o ON r.ID_TERMINAL_ORIGEN = o.ID_TERMINAL
         INNER JOIN LEHZ_TERMINAL d ON r.ID_TERMINAL_DESTINO = d.ID_TERMINAL
         ORDER BY r.NOMBRE_RUTA ASC;
+    -- Esta parte del código se encarga de confirmar la transacción antes de finalizar.
+    COMMIT;
+EXCEPTION
+    -- Esta parte del código se encarga de revertir cambios y reportar el error en español.
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE_APPLICATION_ERROR(-20999, 'Error en LEHZ_PS_LISTAR_RUTAS: ' || SQLERRM);
 END LEHZ_PS_LISTAR_RUTAS;
 /

@@ -47,14 +47,15 @@ $asignaciones = db_rows('LEHZ_PS_LISTAR_CONDUCE');
 </div>
 
 <div class="card mb-4">
-    <div class="card-header">
+    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
         <h3 class="card-title mb-0">Conductores y buses por viaje</h3>
+        <input class="form-control filter-input" type="search" data-filter="conduceBody" placeholder="Filtrar asignaciones..." aria-label="Filtrar asignaciones" style="max-width: 18rem;">
     </div>
     <div class="card-body p-0">
         <div class="table-responsive">
             <table class="table table-striped table-hover align-middle mb-0">
                 <thead><tr><th>Conductor</th><th>Bus</th><th>Viaje</th><th>Fecha</th><th>Ruta</th><th>Salida</th><th class="text-end">Acciones</th></tr></thead>
-                <tbody>
+                <tbody id="conduceBody">
                 <?php foreach ($asignaciones as $a): ?>
                     <tr>
                         <td><?= h($a['CONDUCTOR']) ?></td>

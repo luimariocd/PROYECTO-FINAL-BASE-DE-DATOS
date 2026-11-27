@@ -3,11 +3,8 @@ $pasajeros = lookup_options('pasajeros');
 $viajes = db_rows('LEHZ_PS_LISTAR_VIAJES');
 $buses = lookup_options('buses');
 $metodos = domain_options('METODO_PAGO');
-$paradas = db_query(
-    'SELECT ID_VIAJE, ID_TERMINAL, TERMINAL, ORDEN_PARADA, TARIFA
-       FROM LEHZ_VW_PARADAS_BAJADA
-      ORDER BY ID_VIAJE, ORDEN_PARADA'
-);
+// Esta parte del código se encarga de usar la vista de paradas de Oracle para las tarifas de bajada.
+$paradas = db_rows('LEHZ_PS_LISTAR_PARADAS_BAJADA');
 $boletos = db_rows('LEHZ_PS_LISTAR_BOLETOS');
 ?>
 <div class="card mb-4">
@@ -82,9 +79,12 @@ $boletos = db_rows('LEHZ_PS_LISTAR_BOLETOS');
 </div>
 
 <div class="card mb-4">
-    <div class="card-header">
-        <h3 class="card-title mb-0">Boletos emitidos</h3>
-        <div class="text-body-secondary small mt-1">Anula o marca como usado; el estado y las reglas se validan en Oracle.</div>
+    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <div>
+            <h3 class="card-title mb-0">Boletos emitidos</h3>
+            <div class="text-body-secondary small mt-1">Anula o marca como usado; el estado y las reglas se validan en Oracle.</div>
+        </div>
+        <input class="form-control filter-input" type="search" data-filter="boletosBody" placeholder="Filtrar boletos..." aria-label="Filtrar boletos" style="max-width: 18rem;">
     </div>
     <div class="card-body p-0">
         <div class="table-responsive">
@@ -92,7 +92,7 @@ $boletos = db_rows('LEHZ_PS_LISTAR_BOLETOS');
                 <thead>
                     <tr><th>ID</th><th>Emision</th><th>Pasajero</th><th>Viaje</th><th>Ruta</th><th>Bus</th><th>Asiento</th><th>Valor</th><th>Pago</th><th>Bajada</th><th>Estado</th><th class="text-end">Acciones</th></tr>
                 </thead>
-                <tbody>
+                <tbody id="boletosBody">
                 <?php foreach ($boletos as $b): ?>
                     <?php
                     $badge = $b['ESTADO'] === 'EMITIDO' ? 'text-bg-success' : ($b['ESTADO'] === 'ANULADO' ? 'text-bg-danger' : 'text-bg-secondary');

@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Modelo relacional en 3FN — Proyecto Final de Base de Datos</title>
+<style>
+  @page { size: A4 portrait; margin: 14mm 13mm 16mm 13mm; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #fff; color: #000; }
+  body {
+    font-family: "Calibri", "Arial", sans-serif;
+    font-size: 9.6pt;
+    line-height: 1.34;
+    max-width: 1050px;
+    margin: 24px auto;
+    padding: 0 22px;
+  }
+  h1 { font-size: 19pt; margin: 0 0 4pt; letter-spacing: .2pt; }
+  h2 { font-size: 12.6pt; margin: 17pt 0 6pt; border-bottom: 1.5pt solid #000; padding-bottom: 3pt; }
+  h3 { font-size: 10.4pt; margin: 11pt 0 4pt; }
+  p { margin: 5pt 0; text-align: justify; }
+  ul, ol { margin: 5pt 0 5pt 16pt; padding: 0; }
+  li { margin: 2.5pt 0; }
+  code { font-family: "Consolas", "Courier New", monospace; font-size: 8.8pt; }
+  .meta { font-size: 8.7pt; border-left: 3pt solid #000; padding-left: 8pt; margin: 8pt 0 12pt; }
+  .meta div { margin: 1pt 0; }
+  .lead { border: 1pt solid #000; padding: 7pt 9pt; background: #f5f5f5; margin: 8pt 0 12pt; }
+  table { width: 100%; border-collapse: collapse; margin: 7pt 0 10pt; font-size: 8.2pt; }
+  th, td { border: .7pt solid #000; padding: 3.5pt 5pt; vertical-align: top; text-align: left; }
+  th { background: #e8e8e8; font-weight: bold; }
+  td.num { width: 22pt; text-align: center; }
+  tr { page-break-inside: avoid; }
+  figure { margin: 8pt 0 12pt; text-align: center; page-break-inside: avoid; }
+  figure img { max-width: 100%; width: 520px; height: auto; border: 1pt solid #000; }
+  figcaption { font-size: 8.4pt; margin-top: 4pt; }
+  .script { border: 1.2pt solid #000; padding: 8pt 10pt; page-break-inside: avoid; }
+  .small { font-size: 8.4pt; }
+  .footer { margin-top: 16pt; border-top: 1pt solid #000; padding-top: 5pt; font-size: 8.2pt; }
+  @media print {
+    body { margin: 0; padding: 0; max-width: none; font-size: 9.3pt; }
+    h2 { page-break-after: avoid; }
+    h3 { page-break-after: avoid; }
+    figure img { width: 470px; }
+    a { color: #000; text-decoration: none; }
+    .footer { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<h1>Modelo relacional en 3ª Forma Normal (3FN)</h1>
+<div class="meta">
+  <div><strong>Proyecto:</strong> Proyecto Final de Base de Datos: "Sistema de Gestión Integral de Transporte Público Regional".</div>
+  <div><strong>Curso:</strong> INF324 – Base de Datos · Ingeniería Civil Informática · UCM.</div>
+  <div><strong>Esquema Oracle:</strong> LEHZ · <strong>Fecha:</strong> 27 de noviembre de 2026.</div>
+  <div><strong>Fuentes:</strong> <code>database/01_tablas/02_create_tables.sql</code> y <code>database/03_seguridad/02_create_seguridad.sql</code>.</div>
+</div>
+<div class="lead">Documento de defensa e impresión. Todos los nombres de tablas, columnas, claves y restricciones corresponden al DDL ejecutado en Oracle. El diagrama se presenta más abajo y se entrega además en <code>modelo_relacional.png</code>.</div>
+
+<figure>
+  <img src="modelo_relacional.png" alt="Modelo relacional del esquema LEHZ">
+  <figcaption>Figura 1. Modelo relacional implementado (esquema LEHZ): entidades, claves primarias y relaciones.</figcaption>
+</figure>
+
+<h2>1. Criterio de normalidad aplicado</h2>
+<p>El esquema se diseñó con dependencias funcionales explícitas:</p>
+<ul>
+  <li><strong>1FN:</strong> cada celda contiene un solo valor atómico; no hay grupos repetitivos ni listas en columnas. Las relaciones multivaluadas se resolvieron en tablas propias.</li>
+  <li><strong>2FN:</strong> está en 1FN y todo atributo no clave depende de la <strong>clave primaria completa</strong>, no de una parte de una clave compuesta.</li>
+  <li><strong>3FN:</strong> está en 2FN y <strong>ningún atributo no clave depende de otro atributo no clave</strong>. Los datos descriptivos se almacenan una sola vez, en la tabla cuya clave los identifica. Los cálculos (recaudación, ocupación, promedios) no se almacenan: se obtienen en los reportes con <code>SYS_REFCURSOR</code>.</li>
+</ul>
+<p>Las claves foráneas y los <code>CHECK</code> no son atributos descriptivos copiados: son referencias y dominios validados por Oracle. Por eso no introducen dependencias transitivas entre atributos no clave.</p>
+
+<h2>2. Inventario de las 22 tablas (PK y FK principales)</h2>
+
+<h3>2.1 Geografía, empresas y terminales (5 tablas)</h3>
+<table>
+<tr><th>#</th><th>Tabla</th><th>Clave primaria</th><th>FK principales</th><th>Observación de diseño</th></tr>
+<tr><td class="num">1</td><td><code>LEHZ_REGION</code></td><td><code>ID_REGION</code></td><td>—</td><td><code>NOMBRE_REGION</code> depende solo de <code>ID_REGION</code>.</td></tr>
+<tr><td class="num">2</td><td><code>LEHZ_COMUNA</code></td><td><code>ID_COMUNA</code></td><td><code>ID_REGION</code> → <code>LEHZ_REGION</code></td><td><code>FK_COMUNA_REGION</code>. El nombre de la región no se copia.</td></tr>
+<tr><td class="num">3</td><td><code>LEHZ_TERMINAL</code></td><td><code>ID_TERMINAL</code></td><td><code>ID_COMUNA</code> → <code>LEHZ_COMUNA</code></td><td><code>FK_TERMINAL_COMUNA</code> agregado con <code>ALTER TABLE</code>.</td></tr>
+<tr><td class="num">4</td><td><code>LEHZ_EMPRESA</code></td><td><code>RUT_EMPRESA</code></td><td>—</td><td><code>RAZON_SOCIAL</code>, teléfono y correo dependen del RUT. <code>CK_EMPRESA_RUT</code>, <code>CK_EMPRESA_TEL</code>.</td></tr>
+<tr><td class="num">5</td><td><code>LEHZ_UTILIZAN</code></td><td><code>(ID_TERMINAL, RUT_EMPRESA)</code></td><td>Ambas columnas → <code>LEHZ_TERMINAL</code> y <code>LEHZ_EMPRESA</code></td><td><strong>Intermedia N:M</strong> terminal ↔ empresa. Sin atributos no clave.</td></tr>
+</table>
+
+<h3>2.2 Rutas, horarios y paradas (4 tablas)</h3>
+<table>
+<tr><th>#</th><th>Tabla</th><th>Clave primaria</th><th>FK principales</th><th>Observación de diseño</th></tr>
+<tr><td class="num">6</td><td><code>LEHZ_HORARIO</code></td><td><code>ID_HORARIO</code></td><td>—</td><td><code>HORA_SALIDA</code> / <code>HORA_LLEGADA</code> dependen de <code>ID_HORARIO</code>.</td></tr>
+<tr><td class="num">7</td><td><code>LEHZ_RUTA</code></td><td><code>ID_RUTA</code></td><td><code>ID_TERMINAL_ORIGEN</code>, <code>ID_TERMINAL_DESTINO</code> → <code>LEHZ_TERMINAL</code></td><td><code>CK_RUTA_ORIG_DEST</code> impide origen = destino. <code>NOMBRE_RUTA</code>, distancia y duración dependen de <code>ID_RUTA</code>.</td></tr>
+<tr><td class="num">8</td><td><code>LEHZ_RUTA_PARADA</code></td><td><code>ID_RUTA_PARADA</code></td><td><code>ID_RUTA</code> → <code>LEHZ_RUTA</code> (<code>ON DELETE CASCADE</code>); <code>ID_TERMINAL</code> → <code>LEHZ_TERMINAL</code></td><td><strong>Intermedia N:M</strong> ruta ↔ terminal con atributos propios de la pertenencia.</td></tr>
+<tr><td class="num">9</td><td><code>LEHZ_VIAJE</code></td><td><code>ID_VIAJE</code></td><td><code>ID_HORARIO</code> → <code>LEHZ_HORARIO</code>; <code>ID_RUTA</code> → <code>LEHZ_RUTA</code></td><td><code>UQ_VIAJE_FECHA_HORARIO_RUTA</code> evita duplicar un viaje.</td></tr>
+</table>
+<p class="small"><strong>Nota:</strong> <code>LEHZ_RUTA.HORARIO</code> es la hora de referencia declarada de la ruta; <code>LEHZ_HORARIO</code> es el horario reutilizable asociado al viaje. No se copian columnas descriptivas entre tablas: la salida concreta se resuelve por FK en <code>LEHZ_VIAJE</code>.</p>
+
+<h3>2.3 Flota, personal y mantenciones (5 tablas)</h3>
+<table>
+<tr><th>#</th><th>Tabla</th><th>Clave primaria</th><th>FK principales</th><th>Observación de diseño</th></tr>
+<tr><td class="num">10</td><td><code>LEHZ_BUS</code></td><td><code>PATENTE_BUS</code></td><td><code>RUT_EMPRESA</code> → <code>LEHZ_EMPRESA</code></td><td><code>MARCA</code>, <code>MODELO</code>, <code>CAPACIDAD</code>, <code>TARIFA_BASE</code> dependen de la patente. <code>CK_BUS_PATENTE</code>.</td></tr>
+<tr><td class="num">11</td><td><code>LEHZ_ASIENTO</code></td><td><code>(NUMERO_ASIENTO, PATENTE_BUS)</code></td><td><code>PATENTE_BUS</code> → <code>LEHZ_BUS</code> (<code>FK_ASIENTO_BUS</code>); el boleto referencia la PK compuesta</td><td><code>PISO</code> y <code>UBICACION</code> dependen de la pareja número + bus.</td></tr>
+<tr><td class="num">12</td><td><code>LEHZ_CONDUCTOR</code></td><td><code>RUT_CONDUCTOR</code></td><td><code>RUT_EMPRESA</code> → <code>LEHZ_EMPRESA</code></td><td>Licencia y vigencia dependen del conductor. <code>CK_CONDUCTOR_LICENCIA</code>.</td></tr>
+<tr><td class="num">13</td><td><code>LEHZ_MECANICO</code></td><td><code>RUT_MECANICO</code></td><td><code>RUT_EMPRESA</code> → <code>LEHZ_EMPRESA</code></td><td><code>ESPECIALIDAD</code> depende del mecánico.</td></tr>
+<tr><td class="num">14</td><td><code>LEHZ_MANTENCION</code></td><td><code>ID_MANTENCION</code></td><td><code>RUT_MECANICO</code> → <code>LEHZ_MECANICO</code>; <code>PATENTE_BUS</code> → <code>LEHZ_BUS</code></td><td>Fecha, descripción y costo dependen del evento de mantención.</td></tr>
+</table>
+
+<h3>2.4 Operación comercial (6 tablas)</h3>
+<table>
+<tr><th>#</th><th>Tabla</th><th>Clave primaria</th><th>FK principales</th><th>Observación de diseño</th></tr>
+<tr><td class="num">15</td><td><code>LEHZ_PASAJERO</code></td><td><code>RUT_PASAJERO</code></td><td>—</td><td>Nombre, apellidos, teléfono y correo dependen solo del RUT; no se repiten en boleto ni pago.</td></tr>
+<tr><td class="num">16</td><td><code>LEHZ_CONDUCE</code></td><td><code>(RUT_CONDUCTOR, PATENTE_BUS, ID_VIAJE)</code></td><td>Conductora, bus y viaje → <code>LEHZ_CONDUCTOR</code>, <code>LEHZ_BUS</code>, <code>LEHZ_VIAJE</code></td><td><strong>Intermedia N:M</strong> ternaria. Sin atributos no clave.</td></tr>
+<tr><td class="num">17</td><td><code>LEHZ_BOLETO</code></td><td><code>ID_BOLETO</code></td><td><code>RUT_PASAJERO</code>, <code>ID_VIAJE</code>, <code>(NUMERO_ASIENTO, PATENTE_BUS)</code></td><td><code>VALOR_BOLETO</code>, <code>ESTADO</code>, emisión y anulación dependen del boleto. <code>UQ_LEHZ_BOLETO_ASIENTO_ACTIVO</code> impide doble venta activa.</td></tr>
+<tr><td class="num">18</td><td><code>LEHZ_PAGO</code></td><td><code>ID_PAGO</code></td><td><code>ID_BOLETO</code> → <code>LEHZ_BOLETO</code> (<code>UQ_PAGO_BOLETO</code>, 1:1); <code>RUT_PASAJERO</code> → <code>LEHZ_PASAJERO</code></td><td><code>MONTO_PAGO</code> y <code>METODO_PAGO</code> dependen del pago. <code>RUT_PASAJERO</code> es FK de control, sin datos descriptivos.</td></tr>
+<tr><td class="num">19</td><td><code>LEHZ_PASAJE_BAJADA</code></td><td><code>ID_BAJADA</code></td><td><code>ID_BOLETO</code> → <code>LEHZ_BOLETO</code> (<code>UNIQUE</code>, 1:1, <code>ON DELETE CASCADE</code>); <code>ID_TERMINAL_BAJADA</code> → <code>LEHZ_TERMINAL</code></td><td><code>OBSERVACION</code> y <code>FECHA_REGISTRO</code> dependen de la bajada.</td></tr>
+<tr><td class="num">20</td><td><code>LEHZ_AUDITORIA</code></td><td><code>ID_AUDITORIA</code></td><td>—</td><td>Bitácora desacoplada: <code>TABLA_AFECTADA</code>, <code>OPERACION</code>, <code>USUARIO_BD</code> (DEFAULT <code>USER</code>) y <code>FECHA_EVENTO</code> (DEFAULT <code>SYSTIMESTAMP</code>).</td></tr>
+</table>
+
+<h3>2.5 Seguridad (2 tablas)</h3>
+<table>
+<tr><th>#</th><th>Tabla</th><th>Clave primaria</th><th>FK principales</th><th>Observación de diseño</th></tr>
+<tr><td class="num">21</td><td><code>LEHZ_ROL</code></td><td><code>ID_ROL</code></td><td>—</td><td><code>UQ_LEHZ_NOMBRE_ROL</code>; descripción depende del rol.</td></tr>
+<tr><td class="num">22</td><td><code>LEHZ_USUARIO</code></td><td><code>ID_USUARIO</code></td><td><code>ID_ROL</code> → <code>LEHZ_ROL</code></td><td><code>USERNAME</code> es clave candidata (<code>UQ_LEHZ_USERNAME</code>); hash, estado y fecha dependen del usuario.</td></tr>
+</table>
+<p><strong>Total: 19 tablas en <code>02_create_tables.sql</code> + 3 en <code>02_create_seguridad.sql</code> = 22 tablas.</strong></p>
+
+<h2>3. Tablas intermedias N:M (justificación defendible)</h2>
+<table>
+<tr><th>Tabla intermedia</th><th>Relación resuelta</th><th>Clave primaria</th><th>Por qué no es una columna repetida</th></tr>
+<tr><td><code>LEHZ_CONDUCE</code></td><td>Conductor ↔ Viaje, con bus participante</td><td><code>(RUT_CONDUCTOR, PATENTE_BUS, ID_VIAJE)</code></td><td>Un conductor conduce muchos viajes y un viaje puede tener varios conductores/buses. La clave compuesta impide repetir la ternaria. No tiene atributos no clave.</td></tr>
+<tr><td><code>LEHZ_UTILIZAN</code></td><td>Empresa ↔ Terminal</td><td><code>(ID_TERMINAL, RUT_EMPRESA)</code></td><td>Varias empresas operan en un terminal y una empresa usa varios terminales. Guardar una lista de terminales en <code>LEHZ_EMPRESA</code> violaría 1FN.</td></tr>
+<tr><td><code>LEHZ_RUTA_PARADA</code></td><td>Ruta ↔ Terminal (paradas)</td><td><code>ID_RUTA_PARADA</code>, con candidatas <code>UQ_LEHZ_RUTA_ORDEN</code> y <code>UQ_LEHZ_RUTA_TERMINAL</code></td><td><code>ORDEN_PARADA</code>, <code>MINUTOS_DESDE_ORIG</code> y <code>PERMITE_BAJADA</code> son propiedades de la pertenencia, no de la ruta ni de la terminal.</td></tr>
+</table>
+<p><code>LEHZ_PASAJE_BAJADA</code> y <code>LEHZ_PAGO</code> <strong>no</strong> son N:M: tienen <code>UNIQUE</code> sobre <code>ID_BOLETO</code>, por lo que son relaciones 1:1 (un boleto tiene a lo más un pago y una bajada).</p>
+
+<h2>4. Análisis 1FN → 2FN → 3FN sobre el modelo real</h2>
+
+<h3>4.1 Primera Forma Normal</h3>
+<ul>
+  <li><strong>Atomicidad:</strong> <code>NOMBRE</code>, <code>APELLIDO1</code>, <code>APELLIDO2</code>, <code>TELEFONO</code>, <code>CORREO_ELECTRONICO_*</code> están separados; <code>FECHA_EMISION_BOLETO</code> y <code>HORA_EMISION_BOLETO</code> son columnas distintas con dominios <code>DATE</code> / <code>TIMESTAMP</code>.</li>
+  <li><strong>Sin grupos repetitivos:</strong> no existen <code>PARADA1</code>, <code>PARADA2</code>, <code>ASIENTO1</code>… Las paradas viven en <code>LEHZ_RUTA_PARADA</code>, los asientos en <code>LEHZ_ASIENTO</code> y los boletos en <code>LEHZ_BOLETO</code>.</li>
+  <li><strong>Dominios controlados:</strong> <code>CK_BUS_TIPO_SERVICIO</code>, <code>CK_ASIENTO_UBICACION</code>, <code>CK_BOLETO_ESTADO</code>, <code>CK_PAGO_METODO</code>, <code>CK_LEHZ_PARADA_BAJADA</code>, <code>CK_LEHZ_USUARIO_ESTADO</code> y los <code>REGEXP_LIKE</code> de RUT, teléfono y patente. Un dominio enumerado se modela como <code>CHECK</code>, no como texto libre repetido.</li>
+  <li><strong>Claves atómicas:</strong> las PK compuestas están formadas por columnas simples, por ejemplo <code>(NUMERO_ASIENTO, PATENTE_BUS)</code>.</li>
+</ul>
+
+<h3>4.2 Segunda Forma Normal</h3>
+<table>
+<tr><th>Tabla</th><th>Dependencia de la clave completa</th><th>Verificación</th></tr>
+<tr><td><code>LEHZ_ASIENTO</code></td><td><code>PISO</code>, <code>UBICACION</code> → <code>(NUMERO_ASIENTO, PATENTE_BUS)</code></td><td>El asiento 5 del bus A puede ser ventana y el asiento 5 del bus B pasillo: <code>NUMERO_ASIENTO</code> solo no determina <code>UBICACION</code>.</td></tr>
+<tr><td><code>LEHZ_CONDUCE</code></td><td>Sin atributos no clave</td><td>Tabla pura de intersección: 2FN se satisface por vacuidad.</td></tr>
+<tr><td><code>LEHZ_UTILIZAN</code></td><td>Sin atributos no clave</td><td>Idem.</td></tr>
+<tr><td><code>LEHZ_RUTA_PARADA</code></td><td><code>ORDEN_PARADA</code>, <code>MINUTOS_DESDE_ORIG</code>, <code>PERMITE_BAJADA</code> → <code>ID_RUTA_PARADA</code> y a la candidata <code>(ID_RUTA, ID_TERMINAL)</code></td><td>Conocer solo <code>ID_RUTA</code> no da el orden; conocer solo <code>ID_TERMINAL</code> no da los minutos desde el origen.</td></tr>
+</table>
+<p>En las tablas restantes la PK es simple, por lo que no hay dependencias parciales: <code>RAZON_SOCIAL</code> depende de <code>RUT_EMPRESA</code>, <code>CAPACIDAD</code> de <code>PATENTE_BUS</code>, <code>VALOR_BOLETO</code> de <code>ID_BOLETO</code>, <code>MONTO_PAGO</code> de <code>ID_PAGO</code> y <code>NOMBRE_ROL</code> de <code>ID_ROL</code>.</p>
+
+<h3>4.3 Tercera Forma Normal: por qué no hay atributos dependientes de atributos no clave</h3>
+<ol>
+  <li><strong>La descripción vive con su clave.</strong> <code>NOMBRE_REGION</code> está solo en <code>LEHZ_REGION</code>; <code>NOMBRE_COMUNA</code> solo en <code>LEHZ_COMUNA</code>; <code>RAZON_SOCIAL</code> solo en <code>LEHZ_EMPRESA</code>; <code>NOMBRE_RUTA</code> solo en <code>LEHZ_RUTA</code>; <code>MARCA</code>/<code>MODELO</code> solo en <code>LEHZ_BUS</code>; nombres y apellidos solo en <code>LEHZ_PASAJERO</code>, <code>LEHZ_CONDUCTOR</code> y <code>LEHZ_MECANICO</code>. Si un nombre cambia se actualiza una sola fila: no hay anomalía de actualización.</li>
+  <li><strong>Los atributos derivados no se almacenan.</strong> No hay columnas <code>TOTAL_RECAUDADO</code>, <code>ASIENTOS_DISPONIBLES</code> ni <code>PROMEDIO_COSTO</code>. Esos valores se calculan en <code>LEHZ_PS_REP_RECAUDACION_VIAJES</code>, <code>LEHZ_PS_REP_OCUPACION_ASIENTOS</code> y <code>LEHZ_PS_REP_COSTOS_MANTENCION</code> y se entregan por <code>SYS_REFCURSOR</code>.</li>
+  <li><strong>Estados y tipos son dominios, no entidades repetidas.</strong> <code>ESTADO</code>, <code>TIPO_SERVICIO</code>, <code>METODO_PAGO</code>, <code>UBICACION</code> y <code>PERMITE_BAJADA</code> son <code>CHECK</code>. Si se requieren descripciones, se crearía una tabla catálogo con PK = código; nunca se copiaría la descripción en cada boleto o bus.</li>
+  <li><strong>La tarifa no se duplica como dato maestro.</strong> <code>TARIFA_BASE</code> pertenece al bus; <code>VALOR_BOLETO</code> es el hecho de la transacción calculado por <code>LEHZ_FN_CALCULAR_TARIFA_BUS</code> al vender y persistido para auditoría comercial. No es copia de un atributo ajeno.</li>
+  <li><strong>Caso límite: <code>LEHZ_PAGO.RUT_PASAJERO</code>.</strong> Es FK redundante respecto de <code>LEHZ_BOLETO.RUT_PASAJERO</code>, pero no transporta atributos del pasajero (ni nombre, ni teléfono, ni correo). Como <code>ID_BOLETO</code> tiene <code>UQ_PAGO_BOLETO</code>, <code>ID_PAGO</code> e <code>ID_BOLETO</code> son <strong>claves candidatas</strong>: la dependencia es clave a clave, no de un atributo no clave a otro. Permite validar el pago contra el titular del boleto en PL/SQL sin copiar datos descriptivos.</li>
+  <li><strong>Caso límite: <code>LEHZ_AUDITORIA</code>.</strong> Guarda <code>TABLA_AFECTADA</code> e <code>ID_REGISTRO</code> como texto, no como FK, para que la bitácora sobreviva a borrados y no incorpore dependencias funcionales hacia entidades que cambian. Es un registro de eventos, no una entidad de negocio.</li>
+  <li><strong>Índices y <code>UNIQUE</code> no son atributos.</strong> <code>UQ_LEHZ_BOLETO_ASIENTO_ACTIVO</code> usa <code>CASE</code> para garantizar que solo un boleto <code>EMITIDO</code>/<code>USADO</code> ocupe un asiento por viaje: es integridad, no una columna calculada almacenada.</li>
+</ol>
+<p><strong>Conclusión formal:</strong> para toda tabla <code>R</code>, cada determinante funcional relevante es una clave candidata de <code>R</code> (PK o <code>UNIQUE</code>). No existe <code>A → B</code> donde <code>A</code> y <code>B</code> sean atributos no clave. El esquema cumple 3FN y, por construcción, 1FN y 2FN.</p>
+
+<h2>5. Guion breve para la defensa (90 segundos)</h2>
+<div class="script">
+<p>"El esquema <code>LEHZ</code> tiene 22 tablas: 19 del modelo funcional y 3 de seguridad. Todas tienen PK declarada: simples como <code>ID_REGION</code>, compuestas como <code>(NUMERO_ASIENTO, PATENTE_BUS)</code> y ternarias como <code>(RUT_CONDUCTOR, PATENTE_BUS, ID_VIAJE)</code>. Las FK respetan los tipos y las relaciones 1:N; los N:M se resolvieron en <code>LEHZ_CONDUCE</code>, <code>LEHZ_UTILIZAN</code> y <code>LEHZ_RUTA_PARADA</code>. En 1FN no hay listas ni grupos repetitivos: paradas, asientos y boletos son filas. En 2FN, los atributos de las claves compuestas dependen de la clave completa: el piso y la ubicación de un asiento dependen de número <strong>y</strong> bus; el orden de una parada depende de ruta <strong>y</strong> terminal. En 3FN, los nombres y descripciones se guardan una sola vez en su tabla madre y los datos derivados —recaudación, ocupación, costos— no se almacenan: se calculan en procedimientos con <code>SYS_REFCURSOR</code>. La única FK aparentemente redundante es <code>RUT_PASAJERO</code> en <code>LEHZ_PAGO</code>, pero <code>ID_BOLETO</code> es única, así que es clave-candidata a clave-candidata, sin copiar atributos descriptivos. Por eso el modelo alcanza 3FN sin perder trazabilidad."</p>
+</div>
+
+<div class="footer">UCM · INF324 – Base de Datos · Proyecto Final · Modelo relacional en 3FN · Entrega impresa al inicio de la exposición.</div>
+
+</body>
+</html>

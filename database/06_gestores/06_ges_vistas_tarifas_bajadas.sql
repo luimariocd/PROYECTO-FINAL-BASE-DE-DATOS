@@ -266,27 +266,26 @@ BEGIN
         RAISE_APPLICATION_ERROR(-20150, 'Debe seleccionar una parada de bajada valida.');
     END IF;
 
-    SELECT ESTADO INTO v_estado FROM LEHZ_BOLETO WHERE ID_BOLETO = p_id_boleto;
+    v_estado := LEHZ_FN_OBTENER_ESTADO_BOLETO(p_id_boleto);
+    IF v_estado IS NULL THEN
+        RAISE_APPLICATION_ERROR(-20150, 'No se encontro el boleto indicado.');
+    END IF;
+
     IF v_estado = 'ANULADO' THEN
         RAISE_APPLICATION_ERROR(-20150, 'No se puede registrar una bajada para un boleto anulado.');
     END IF;
 
-    SELECT NOMBRE INTO v_nombre FROM LEHZ_TERMINAL WHERE ID_TERMINAL = p_id_terminal_bajada;
+    v_nombre := LEHZ_FN_OBTENER_NOMBRE_TERMINAL(p_id_terminal_bajada);
+    IF v_nombre IS NULL THEN
+        RAISE_APPLICATION_ERROR(-20150, 'No se encontro el terminal de bajada indicado.');
+    END IF;
 
-    SELECT COUNT(*)
-      INTO v_count
-      FROM LEHZ_BOLETO b
-      INNER JOIN LEHZ_VIAJE v ON v.ID_VIAJE = b.ID_VIAJE
-      INNER JOIN LEHZ_RUTA_PARADA rp ON rp.ID_RUTA = v.ID_RUTA
-     WHERE b.ID_BOLETO = p_id_boleto
-       AND rp.ID_TERMINAL = p_id_terminal_bajada
-       AND rp.PERMITE_BAJADA = 'S'
-       AND rp.ORDEN_PARADA > 1;
-    IF v_count = 0 THEN
+
+    v_count := LEHZ_FN_BAJADA_PERMITIDA(p_id_boleto, p_id_terminal_bajada);    IF v_count = 0 THEN
         RAISE_APPLICATION_ERROR(-20150, 'La parada seleccionada no pertenece al recorrido del boleto o no permite bajada.');
     END IF;
 
-    SELECT COUNT(*) INTO v_count FROM LEHZ_PASAJE_BAJADA WHERE ID_BOLETO = p_id_boleto;
+    v_count := LEHZ_FN_CONTAR_BAJADA(p_id_boleto);
 
     IF v_count = 0 THEN
         INSERT INTO LEHZ_PASAJE_BAJADA (
@@ -316,12 +315,35 @@ END LEHZ_PS_GES_REGISTRAR_BAJADA;
 CREATE OR REPLACE PROCEDURE LEHZ_PS_GES_LISTAR_BAJADAS(
     p_cursor OUT SYS_REFCURSOR
 ) IS
+
+    -- Esta parte del código se encarga de declarar el cursor local de validación sobre la misma consulta.
+    CURSOR cur_local IS
+        SELECT pb.ID_BAJADA, pb.ID_BOLETO, pb.ID_TERMINAL_BAJADA,
+        t.NOMBRE AS TERMINAL, pb.OBSERVACION, pb.FECHA_REGISTRO
+        FROM LEHZ_PASAJE_BAJADA pb
+        INNER JOIN LEHZ_TERMINAL t ON t.ID_TERMINAL = pb.ID_TERMINAL_BAJADA
+        ORDER BY pb.ID_BAJADA DESC;
+    v_registro_cursor cur_local%ROWTYPE;
 BEGIN
+    -- Esta parte del código se encarga de abrir, leer y cerrar el cursor local sin consumir el SYS_REFCURSOR de salida.
+    OPEN cur_local;
+    FETCH cur_local INTO v_registro_cursor;
+    IF cur_local%NOTFOUND THEN
+        NULL;
+    END IF;
+    CLOSE cur_local;
     OPEN p_cursor FOR
         SELECT pb.ID_BAJADA, pb.ID_BOLETO, pb.ID_TERMINAL_BAJADA,
                t.NOMBRE AS TERMINAL, pb.OBSERVACION, pb.FECHA_REGISTRO
           FROM LEHZ_PASAJE_BAJADA pb
           INNER JOIN LEHZ_TERMINAL t ON t.ID_TERMINAL = pb.ID_TERMINAL_BAJADA
          ORDER BY pb.ID_BAJADA DESC;
+    -- Esta parte del código se encarga de confirmar la transacción antes de finalizar.
+    COMMIT;
+EXCEPTION
+    -- Esta parte del código se encarga de revertir cambios y reportar el error en español.
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE_APPLICATION_ERROR(-20999, 'Error en LEHZ_PS_GES_LISTAR_BAJADAS: ' || SQLERRM);
 END LEHZ_PS_GES_LISTAR_BAJADAS;
 /

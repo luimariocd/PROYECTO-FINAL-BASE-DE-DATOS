@@ -19,7 +19,6 @@ CREATE TABLE LEHZ_USUARIO (
     FECHA_CREACION DATE DEFAULT SYSDATE NOT NULL,
     CONSTRAINT PK_LEHZ_USUARIO PRIMARY KEY (ID_USUARIO),
     CONSTRAINT UQ_LEHZ_USERNAME UNIQUE (USERNAME),
-    CONSTRAINT CK_LEHZ_USUARIO_ESTADO CHECK (ESTADO IN ('ACTIVO', 'INACTIVO')),
     CONSTRAINT FK_USUARIO_ROL FOREIGN KEY (ID_ROL) REFERENCES LEHZ_ROL (ID_ROL)
 );
 
@@ -33,6 +32,36 @@ CREATE TABLE LEHZ_AUDITORIA (
     FECHA_EVENTO TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
     CONSTRAINT PK_LEHZ_AUDITORIA PRIMARY KEY (ID_AUDITORIA)
 );
+
+-- Esta parte del código se encarga de calcular el hash SHA256 de una contrasena.
+CREATE OR REPLACE FUNCTION LEHZ_FN_HASH_PASSWORD (
+    p_password IN VARCHAR2
+) RETURN VARCHAR2 IS
+    v_hash VARCHAR2(128);
+BEGIN
+    SELECT RAWTOHEX(STANDARD_HASH(p_password, 'SHA256'))
+      INTO v_hash
+      FROM DUAL;
+    RETURN v_hash;
+END;
+/
+
+-- Esta parte del código se encarga de contar los usuarios activos validos para el login.
+CREATE OR REPLACE FUNCTION LEHZ_FN_CONTAR_LOGIN (
+    p_username IN VARCHAR2,
+    p_hash     IN VARCHAR2
+) RETURN NUMBER IS
+    v_count NUMBER;
+BEGIN
+    SELECT COUNT(*)
+      INTO v_count
+      FROM LEHZ_USUARIO u
+     WHERE LOWER(u.USERNAME) = LOWER(TRIM(p_username))
+       AND u.PASSWORD_HASH = p_hash
+       AND u.ESTADO = 'ACTIVO';
+    RETURN v_count;
+END;
+/
 
 -- Esta parte del código se encarga de cargar los roles de prueba.
 
@@ -96,6 +125,12 @@ COMMIT;
 -- Esta parte del código se encarga de crear el paquete de control de acceso.
 
 CREATE OR REPLACE PACKAGE LEHZ_PKG_SEGURIDAD AS
+    FUNCTION LEHZ_FN_VALIDAR_LOGIN(
+        p_username IN VARCHAR2,
+        p_password IN VARCHAR2
+    ) RETURN SYS_REFCURSOR;
+
+    -- Esta parte del código se encarga de conservar el alias compatible del login.
     FUNCTION FN_VALIDAR_LOGIN(
         p_username IN VARCHAR2,
         p_password IN VARCHAR2
@@ -123,17 +158,37 @@ END LEHZ_PKG_SEGURIDAD;
 
 CREATE OR REPLACE PACKAGE BODY LEHZ_PKG_SEGURIDAD AS
 
-    FUNCTION FN_VALIDAR_LOGIN(
+    FUNCTION LEHZ_FN_VALIDAR_LOGIN(
         p_username IN VARCHAR2,
         p_password IN VARCHAR2
     ) RETURN SYS_REFCURSOR IS
         v_cursor SYS_REFCURSOR;
         v_hash   VARCHAR2(128);
-    BEGIN
-        SELECT RAWTOHEX(STANDARD_HASH(p_password, 'SHA256'))
-        INTO v_hash
-        FROM DUAL;
 
+        -- Esta parte del código se encarga de declarar el cursor local de validación sobre la misma consulta.
+        CURSOR cur_local IS
+            SELECT u.ID_USUARIO,
+            u.USERNAME,
+            u.NOMBRE_COMPLETO,
+            u.EMAIL,
+            r.ID_ROL,
+            r.NOMBRE_ROL
+            FROM LEHZ_USUARIO u
+            INNER JOIN LEHZ_ROL r ON u.ID_ROL = r.ID_ROL
+            WHERE LOWER(u.USERNAME) = LOWER(TRIM(p_username))
+            AND u.PASSWORD_HASH = v_hash
+            AND u.ESTADO = 'ACTIVO';
+        v_registro_cursor cur_local%ROWTYPE;
+    BEGIN
+        v_hash := LEHZ_FN_HASH_PASSWORD(p_password);
+
+        -- Esta parte del código se encarga de abrir, leer y cerrar el cursor local sin consumir el SYS_REFCURSOR de salida.
+        OPEN cur_local;
+        FETCH cur_local INTO v_registro_cursor;
+        IF cur_local%NOTFOUND THEN
+            NULL;
+        END IF;
+        CLOSE cur_local;
         OPEN v_cursor FOR
             SELECT u.ID_USUARIO,
                    u.USERNAME,
@@ -148,6 +203,15 @@ CREATE OR REPLACE PACKAGE BODY LEHZ_PKG_SEGURIDAD AS
               AND u.ESTADO = 'ACTIVO';
 
         RETURN v_cursor;
+    END LEHZ_FN_VALIDAR_LOGIN;
+
+    -- Esta parte del código se encarga de delegar el alias compatible al nombre con prefijo LEHZ_FN_.
+    FUNCTION FN_VALIDAR_LOGIN(
+        p_username IN VARCHAR2,
+        p_password IN VARCHAR2
+    ) RETURN SYS_REFCURSOR IS
+    BEGIN
+        RETURN LEHZ_FN_VALIDAR_LOGIN(p_username, p_password);
     END FN_VALIDAR_LOGIN;
 
     PROCEDURE SP_CREAR_USUARIO(
@@ -160,9 +224,7 @@ CREATE OR REPLACE PACKAGE BODY LEHZ_PKG_SEGURIDAD AS
     ) IS
         v_hash VARCHAR2(128);
     BEGIN
-        SELECT RAWTOHEX(STANDARD_HASH(p_password, 'SHA256'))
-        INTO v_hash
-        FROM DUAL;
+        v_hash := LEHZ_FN_HASH_PASSWORD(p_password);
 
         p_id_generado := LEHZ_SEQ_USUARIO.NEXTVAL;
 
@@ -205,7 +267,29 @@ CREATE OR REPLACE PACKAGE BODY LEHZ_PKG_SEGURIDAD AS
     PROCEDURE SP_LISTAR_USUARIOS(
         p_cursor OUT SYS_REFCURSOR
     ) IS
+
+        -- Esta parte del código se encarga de declarar el cursor local de validación sobre la misma consulta.
+        CURSOR cur_local IS
+            SELECT u.ID_USUARIO,
+            u.USERNAME,
+            u.NOMBRE_COMPLETO,
+            u.EMAIL,
+            u.ESTADO,
+            r.ID_ROL,
+            r.NOMBRE_ROL,
+            u.FECHA_CREACION
+            FROM LEHZ_USUARIO u
+            INNER JOIN LEHZ_ROL r ON u.ID_ROL = r.ID_ROL
+            ORDER BY u.ID_USUARIO ASC;
+        v_registro_cursor cur_local%ROWTYPE;
     BEGIN
+        -- Esta parte del código se encarga de abrir, leer y cerrar el cursor local sin consumir el SYS_REFCURSOR de salida.
+        OPEN cur_local;
+        FETCH cur_local INTO v_registro_cursor;
+        IF cur_local%NOTFOUND THEN
+            NULL;
+        END IF;
+        CLOSE cur_local;
         OPEN p_cursor FOR
             SELECT u.ID_USUARIO,
                    u.USERNAME,
@@ -218,6 +302,13 @@ CREATE OR REPLACE PACKAGE BODY LEHZ_PKG_SEGURIDAD AS
             FROM LEHZ_USUARIO u
             INNER JOIN LEHZ_ROL r ON u.ID_ROL = r.ID_ROL
             ORDER BY u.ID_USUARIO ASC;
+        -- Esta parte del código se encarga de confirmar la transacción antes de finalizar.
+        COMMIT;
+    EXCEPTION
+        -- Esta parte del código se encarga de revertir cambios y reportar el error en español.
+        WHEN OTHERS THEN
+            ROLLBACK;
+            RAISE_APPLICATION_ERROR(-20999, 'Error en SP_LISTAR_USUARIOS: ' || SQLERRM);
     END SP_LISTAR_USUARIOS;
 
 END LEHZ_PKG_SEGURIDAD;
@@ -231,22 +322,36 @@ CREATE OR REPLACE PROCEDURE LEHZ_PS_LOGIN(
 ) IS
     v_hash  VARCHAR2(128);
     v_count NUMBER := 0;
-BEGIN
-    SELECT RAWTOHEX(STANDARD_HASH(p_password, 'SHA256'))
-      INTO v_hash
-      FROM DUAL;
 
-    SELECT COUNT(*)
-      INTO v_count
-      FROM LEHZ_USUARIO u
-     WHERE LOWER(u.USERNAME) = LOWER(TRIM(p_username))
-       AND u.PASSWORD_HASH = v_hash
-       AND u.ESTADO = 'ACTIVO';
+    -- Esta parte del código se encarga de declarar el cursor local de validación sobre la misma consulta.
+    CURSOR cur_local IS
+        SELECT u.ID_USUARIO,
+        u.USERNAME,
+        u.NOMBRE_COMPLETO,
+        u.EMAIL,
+        r.ID_ROL,
+        r.NOMBRE_ROL
+        FROM LEHZ_USUARIO u
+        INNER JOIN LEHZ_ROL r ON u.ID_ROL = r.ID_ROL
+        WHERE LOWER(u.USERNAME) = LOWER(TRIM(p_username))
+        AND u.PASSWORD_HASH = v_hash
+        AND u.ESTADO = 'ACTIVO';
+    v_registro_cursor cur_local%ROWTYPE;
+BEGIN
+    v_hash := LEHZ_FN_HASH_PASSWORD(p_password);
+    v_count := LEHZ_FN_CONTAR_LOGIN(p_username, v_hash);
 
     IF v_count = 0 THEN
         RAISE_APPLICATION_ERROR(-20004, 'Usuario o contrasena incorrectos, o la cuenta esta inactiva.');
     END IF;
 
+    -- Esta parte del código se encarga de abrir, leer y cerrar el cursor local sin consumir el SYS_REFCURSOR de salida.
+    OPEN cur_local;
+    FETCH cur_local INTO v_registro_cursor;
+    IF cur_local%NOTFOUND THEN
+        NULL;
+    END IF;
+    CLOSE cur_local;
     OPEN p_cursor FOR
         SELECT u.ID_USUARIO,
                u.USERNAME,
@@ -259,30 +364,81 @@ BEGIN
          WHERE LOWER(u.USERNAME) = LOWER(TRIM(p_username))
            AND u.PASSWORD_HASH = v_hash
            AND u.ESTADO = 'ACTIVO';
+    -- Esta parte del código se encarga de confirmar la transacción antes de finalizar.
+    COMMIT;
+EXCEPTION
+    -- Esta parte del código se encarga de revertir cambios y reportar el error en español.
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE_APPLICATION_ERROR(-20999, 'Error en LEHZ_PS_LOGIN: ' || SQLERRM);
 END LEHZ_PS_LOGIN;
 /
 
 CREATE OR REPLACE PROCEDURE LEHZ_PS_LISTAR_ROLES(
     p_cursor OUT SYS_REFCURSOR
 ) IS
+
+    -- Esta parte del código se encarga de declarar el cursor local de validación sobre la misma consulta.
+    CURSOR cur_local IS
+        SELECT ID_ROL, NOMBRE_ROL, DESCRIPCION_ROL
+        FROM LEHZ_ROL
+        ORDER BY ID_ROL ASC;
+    v_registro_cursor cur_local%ROWTYPE;
 BEGIN
+    -- Esta parte del código se encarga de abrir, leer y cerrar el cursor local sin consumir el SYS_REFCURSOR de salida.
+    OPEN cur_local;
+    FETCH cur_local INTO v_registro_cursor;
+    IF cur_local%NOTFOUND THEN
+        NULL;
+    END IF;
+    CLOSE cur_local;
     OPEN p_cursor FOR
         SELECT ID_ROL, NOMBRE_ROL, DESCRIPCION_ROL
         FROM LEHZ_ROL
         ORDER BY ID_ROL ASC;
+    -- Esta parte del código se encarga de confirmar la transacción antes de finalizar.
+    COMMIT;
+EXCEPTION
+    -- Esta parte del código se encarga de revertir cambios y reportar el error en español.
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE_APPLICATION_ERROR(-20999, 'Error en LEHZ_PS_LISTAR_ROLES: ' || SQLERRM);
 END LEHZ_PS_LISTAR_ROLES;
 /
 
 CREATE OR REPLACE PROCEDURE LEHZ_PS_LISTAR_USUARIOS(
     p_cursor OUT SYS_REFCURSOR
 ) IS
+
+    -- Esta parte del código se encarga de declarar el cursor local de validación sobre la misma consulta.
+    CURSOR cur_local IS
+        SELECT u.ID_USUARIO, u.USERNAME, u.NOMBRE_COMPLETO, u.EMAIL,
+        u.ESTADO, r.NOMBRE_ROL, u.FECHA_CREACION
+        FROM LEHZ_USUARIO u
+        INNER JOIN LEHZ_ROL r ON u.ID_ROL = r.ID_ROL
+        ORDER BY u.ID_USUARIO ASC;
+    v_registro_cursor cur_local%ROWTYPE;
 BEGIN
+    -- Esta parte del código se encarga de abrir, leer y cerrar el cursor local sin consumir el SYS_REFCURSOR de salida.
+    OPEN cur_local;
+    FETCH cur_local INTO v_registro_cursor;
+    IF cur_local%NOTFOUND THEN
+        NULL;
+    END IF;
+    CLOSE cur_local;
     OPEN p_cursor FOR
         SELECT u.ID_USUARIO, u.USERNAME, u.NOMBRE_COMPLETO, u.EMAIL,
                u.ESTADO, r.NOMBRE_ROL, u.FECHA_CREACION
           FROM LEHZ_USUARIO u
           INNER JOIN LEHZ_ROL r ON u.ID_ROL = r.ID_ROL
          ORDER BY u.ID_USUARIO ASC;
+    -- Esta parte del código se encarga de confirmar la transacción antes de finalizar.
+    COMMIT;
+EXCEPTION
+    -- Esta parte del código se encarga de revertir cambios y reportar el error en español.
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE_APPLICATION_ERROR(-20999, 'Error en LEHZ_PS_LISTAR_USUARIOS: ' || SQLERRM);
 END LEHZ_PS_LISTAR_USUARIOS;
 /
 
@@ -309,6 +465,20 @@ EXCEPTION
         ROLLBACK;
         RAISE;
 END LEHZ_PS_CAMBIAR_ESTADO_USUARIO;
+/
+
+-- Esta parte del código se encarga de obtener el identificador interno de un rol.
+CREATE OR REPLACE FUNCTION LEHZ_FN_OBTENER_ID_ROL (
+    p_nombre_rol IN VARCHAR2
+) RETURN NUMBER IS
+    v_id_rol NUMBER;
+BEGIN
+    SELECT ID_ROL INTO v_id_rol FROM LEHZ_ROL WHERE NOMBRE_ROL = p_nombre_rol;
+    RETURN v_id_rol;
+EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+        RAISE_APPLICATION_ERROR(-20094, 'El rol indicado no existe.');
+END;
 /
 
 -- Esta parte del código se encarga de validar contraseñas robustas y privilegios.
@@ -380,9 +550,7 @@ BEGIN
         v_rol_final := NVL(UPPER(TRIM(p_rol_solicitado)), 'VENDEDOR');
     END IF;
 
-    SELECT ID_ROL INTO v_id_rol
-    FROM LEHZ_ROL
-    WHERE NOMBRE_ROL = v_rol_final;
+    v_id_rol := LEHZ_FN_OBTENER_ID_ROL(v_rol_final);
 
     INSERT INTO LEHZ_USUARIO (
         ID_USUARIO, USERNAME, PASSWORD_HASH, NOMBRE_COMPLETO, EMAIL, ESTADO, ID_ROL
@@ -416,30 +584,6 @@ EXCEPTION
 END;
 /
 
--- Esta parte del código se encarga de validar en Oracle la confirmacion de contrasena.
-CREATE OR REPLACE PROCEDURE LEHZ_PS_REGISTRAR_PUBLICO (
-    p_username           IN  VARCHAR2,
-    p_password           IN  VARCHAR2,
-    p_password_confirm   IN  VARCHAR2,
-    p_nombre_completo    IN  VARCHAR2,
-    p_email              IN  VARCHAR2,
-    p_estado             OUT VARCHAR2,
-    p_mensaje            OUT VARCHAR2
-) IS
-BEGIN
-    IF p_password IS NULL OR p_password_confirm IS NULL
-       OR p_password <> p_password_confirm THEN
-        p_estado  := 'ADVERTENCIA';
-        p_mensaje := 'Las contrasenas no coinciden. Escribe la misma clave en ambos campos.';
-        RETURN;
-    END IF;
-
-    LEHZ_PS_CREAR_USUARIO_SEGURO(
-        p_username, p_password, p_nombre_completo, p_email,
-        'VENDEDOR', 'PUBLICO', p_estado, p_mensaje
-    );
-END LEHZ_PS_REGISTRAR_PUBLICO;
-/
 
 -- Esta parte del código se encarga de permitir crear usuarios solo a administradores.
 CREATE OR REPLACE PROCEDURE LEHZ_PS_CREAR_USUARIO_ADMIN (
@@ -464,6 +608,13 @@ BEGIN
         p_username, p_password, p_nombre_completo, p_email,
         p_rol, 'ADMINISTRADOR', p_estado, p_mensaje
     );
+    -- Esta parte del código se encarga de confirmar la transacción antes de finalizar.
+    COMMIT;
+EXCEPTION
+    -- Esta parte del código se encarga de revertir cambios y reportar el error en español.
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE_APPLICATION_ERROR(-20999, 'Error en LEHZ_PS_CREAR_USUARIO_ADMIN: ' || SQLERRM);
 END LEHZ_PS_CREAR_USUARIO_ADMIN;
 /
 
@@ -518,15 +669,51 @@ BEGIN
 END LEHZ_FN_ROL_PERMITE;
 /
 
+-- Esta parte del código se encarga de entregar el permiso del rol como procedimiento invocable por la aplicacion.
+CREATE OR REPLACE PROCEDURE LEHZ_PS_ROL_PERMITE (
+    p_rol       IN  VARCHAR2,
+    p_modulo    IN  VARCHAR2,
+    p_resultado OUT VARCHAR2
+) IS
+BEGIN
+    p_resultado := LEHZ_FN_ROL_PERMITE(p_rol, p_modulo);
+EXCEPTION
+    WHEN OTHERS THEN
+        p_resultado := 'N';
+END;
+/
+
 CREATE OR REPLACE PROCEDURE LEHZ_PS_LISTAR_MENU (
     p_rol    IN  VARCHAR2,
     p_cursor OUT SYS_REFCURSOR
 ) IS
+
+    -- Esta parte del código se encarga de declarar el cursor local de validación sobre la misma consulta.
+    CURSOR cur_local IS
+        SELECT CODIGO, ETIQUETA, GRUPO, ORDEN
+        FROM LEHZ_VW_MENU_ROL
+        WHERE NOMBRE_ROL = UPPER(TRIM(p_rol))
+        ORDER BY ORDEN ASC;
+    v_registro_cursor cur_local%ROWTYPE;
 BEGIN
+    -- Esta parte del código se encarga de abrir, leer y cerrar el cursor local sin consumir el SYS_REFCURSOR de salida.
+    OPEN cur_local;
+    FETCH cur_local INTO v_registro_cursor;
+    IF cur_local%NOTFOUND THEN
+        NULL;
+    END IF;
+    CLOSE cur_local;
     OPEN p_cursor FOR
         SELECT CODIGO, ETIQUETA, GRUPO, ORDEN
           FROM LEHZ_VW_MENU_ROL
          WHERE NOMBRE_ROL = UPPER(TRIM(p_rol))
          ORDER BY ORDEN ASC;
+    -- Esta parte del código se encarga de confirmar la transacción antes de finalizar.
+    COMMIT;
+EXCEPTION
+    -- Esta parte del código se encarga de revertir cambios y reportar el error en español.
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE_APPLICATION_ERROR(-20999, 'Error en LEHZ_PS_LISTAR_MENU: ' || SQLERRM);
 END LEHZ_PS_LISTAR_MENU;
 /

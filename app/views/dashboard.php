@@ -1,5 +1,6 @@
 <?php
-$resumen = db_query('SELECT * FROM LEHZ_VW_RESUMEN');
+// Esta parte del código se encarga de usar la vista de resumen ya calculada en Oracle.
+$resumen = db_rows('LEHZ_PS_RESUMEN_DASHBOARD');
 $resumen = $resumen[0] ?? [];
 $viajes = can_access('viaje') || can_access('venta') ? db_rows('LEHZ_PS_LISTAR_VIAJES') : [];
 $boletos = can_access('venta') ? db_rows('LEHZ_PS_LISTAR_BOLETOS') : [];

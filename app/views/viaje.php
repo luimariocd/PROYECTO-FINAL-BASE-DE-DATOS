@@ -41,14 +41,15 @@ $viajes = db_rows('LEHZ_PS_LISTAR_VIAJES');
 </div>
 
 <div class="card mb-4">
-    <div class="card-header">
+    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
         <h3 class="card-title mb-0">Viajes programados</h3>
+        <input class="form-control filter-input" type="search" data-filter="viajesBody" placeholder="Filtrar viajes..." aria-label="Filtrar viajes" style="max-width: 18rem;">
     </div>
     <div class="card-body p-0">
         <div class="table-responsive">
             <table class="table table-striped table-hover align-middle mb-0">
                 <thead><tr><th>ID</th><th>Fecha</th><th>Ruta</th><th>Salida</th><th>Llegada</th><th>Origen</th><th>Destino</th><th>Buses</th><th>Boletos activos</th></tr></thead>
-                <tbody>
+                <tbody id="viajesBody">
                 <?php foreach ($viajes as $v): ?>
                     <tr>
                         <td><?= h($v['ID_VIAJE']) ?></td>
