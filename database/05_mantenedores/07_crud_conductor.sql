@@ -1,9 +1,7 @@
-ALTER SESSION SET CURRENT_SCHEMA = LEHZ;
+ALTER SESSION SET CURRENT_SCHEMA = LHAOMRJZ;
 
--- ============================================================================
--- MANTENEDOR 07: CONDUCTORES
--- ============================================================================
-CREATE OR REPLACE PROCEDURE LEHZ_PS_IUD_CONDUCTOR(
+-- Esta parte del código se encarga de crear el mantenedor de conductores.
+CREATE OR REPLACE PROCEDURE LHAOMRJZ_PS_IUD_CONDUCTOR(
     p_opcion       IN VARCHAR2,
     p_rut          IN VARCHAR2,
     p_nombre       IN VARCHAR2 DEFAULT NULL,
@@ -19,12 +17,12 @@ CREATE OR REPLACE PROCEDURE LEHZ_PS_IUD_CONDUCTOR(
     v_telefono VARCHAR2(20);
     v_count    NUMBER := 0;
 BEGIN
-    LOCK TABLE LEHZ_CONDUCTOR IN ROW EXCLUSIVE MODE;
-    v_rut      := LEHZ_FN_NORMALIZAR_RUT(p_rut, 'PERSONA');
+    LOCK TABLE LHAOMRJZ_CONDUCTOR IN ROW EXCLUSIVE MODE;
+    v_rut      := LHAOMRJZ_FN_NORMALIZAR_RUT(p_rut, 'PERSONA');
 
     IF UPPER(TRIM(p_opcion)) IN ('I', 'U') THEN
-        v_rut_emp  := LEHZ_FN_NORMALIZAR_RUT(p_rut_empresa, 'EMPRESA');
-        v_telefono := LEHZ_FN_VALIDAR_TEL_CL(p_telefono, 'PERSONA');
+        v_rut_emp  := LHAOMRJZ_FN_NORMALIZAR_RUT(p_rut_empresa, 'EMPRESA');
+        v_telefono := LHAOMRJZ_FN_VALIDAR_TEL_CL(p_telefono, 'PERSONA');
         IF p_nombre IS NULL OR TRIM(p_nombre) = '' THEN
             RAISE_APPLICATION_ERROR(-20060, 'El nombre del conductor es obligatorio.');
         END IF;
@@ -37,27 +35,27 @@ BEGIN
         IF p_tipo_licencia IS NULL OR UPPER(TRIM(p_tipo_licencia)) NOT IN ('A1', 'A2', 'A3') THEN
             RAISE_APPLICATION_ERROR(-20060, 'Tipo de licencia invalido: debe ser A1, A2 o A3.');
         END IF;
-        SELECT COUNT(*) INTO v_count FROM LEHZ_EMPRESA WHERE RUT_EMPRESA = v_rut_emp;
+        v_count := LHAOMRJZ_FN_EXISTE_EMPRESA(v_rut_emp);
         IF v_count = 0 THEN
             RAISE_APPLICATION_ERROR(-20060, 'La empresa seleccionada no existe.');
         END IF;
     END IF;
 
     IF UPPER(TRIM(p_opcion)) = 'I' THEN
-        INSERT INTO LEHZ_CONDUCTOR (
+        INSERT INTO LHAOMRJZ_CONDUCTOR (
             RUT_CONDUCTOR, NOMBRE_CONDUCTOR, APELLIDO1_CONDUCTOR, APELLIDO2_CONDUCTOR,
             TELEFONO, TIPO_LICENCIA, VENCIMIENTO_LICENCIA, RUT_EMPRESA
         ) VALUES (
-            v_rut, LEHZ_FN_NORMALIZAR_TEXTO(p_nombre), LEHZ_FN_NORMALIZAR_TEXTO(p_apellido1),
-            LEHZ_FN_NORMALIZAR_TEXTO(p_apellido2), v_telefono, UPPER(TRIM(p_tipo_licencia)),
+            v_rut, LHAOMRJZ_FN_NORMALIZAR_TEXTO(p_nombre), LHAOMRJZ_FN_NORMALIZAR_TEXTO(p_apellido1),
+            LHAOMRJZ_FN_NORMALIZAR_TEXTO(p_apellido2), v_telefono, UPPER(TRIM(p_tipo_licencia)),
             p_vencimiento, v_rut_emp
         );
 
     ELSIF UPPER(TRIM(p_opcion)) = 'U' THEN
-        UPDATE LEHZ_CONDUCTOR
-           SET NOMBRE_CONDUCTOR = LEHZ_FN_NORMALIZAR_TEXTO(p_nombre),
-               APELLIDO1_CONDUCTOR = LEHZ_FN_NORMALIZAR_TEXTO(p_apellido1),
-               APELLIDO2_CONDUCTOR = LEHZ_FN_NORMALIZAR_TEXTO(p_apellido2),
+        UPDATE LHAOMRJZ_CONDUCTOR
+           SET NOMBRE_CONDUCTOR = LHAOMRJZ_FN_NORMALIZAR_TEXTO(p_nombre),
+               APELLIDO1_CONDUCTOR = LHAOMRJZ_FN_NORMALIZAR_TEXTO(p_apellido1),
+               APELLIDO2_CONDUCTOR = LHAOMRJZ_FN_NORMALIZAR_TEXTO(p_apellido2),
                TELEFONO = v_telefono,
                TIPO_LICENCIA = UPPER(TRIM(p_tipo_licencia)),
                VENCIMIENTO_LICENCIA = p_vencimiento,
@@ -69,7 +67,7 @@ BEGIN
         END IF;
 
     ELSIF UPPER(TRIM(p_opcion)) = 'D' THEN
-        DELETE FROM LEHZ_CONDUCTOR WHERE RUT_CONDUCTOR = v_rut;
+        DELETE FROM LHAOMRJZ_CONDUCTOR WHERE RUT_CONDUCTOR = v_rut;
         IF SQL%ROWCOUNT = 0 THEN
             RAISE_APPLICATION_ERROR(-20062, 'No se encontro el conductor a eliminar.');
         END IF;
@@ -89,13 +87,33 @@ EXCEPTION
             RAISE_APPLICATION_ERROR(-20062, 'No se puede eliminar el conductor: tiene viajes asignados.');
         END IF;
         RAISE;
-END LEHZ_PS_IUD_CONDUCTOR;
+END LHAOMRJZ_PS_IUD_CONDUCTOR;
 /
 
-CREATE OR REPLACE PROCEDURE LEHZ_PS_LISTAR_CONDUCTORES(
+CREATE OR REPLACE PROCEDURE LHAOMRJZ_PS_LISTAR_CONDUCTORES(
     p_cursor OUT SYS_REFCURSOR
 ) IS
+
+    -- Esta parte del código se encarga de declarar el cursor local de validación sobre la misma consulta.
+    CURSOR cur_local IS
+        SELECT c.RUT_CONDUCTOR, c.NOMBRE_CONDUCTOR, c.APELLIDO1_CONDUCTOR,
+        c.APELLIDO2_CONDUCTOR, c.TELEFONO, c.TIPO_LICENCIA,
+        TO_CHAR(c.VENCIMIENTO_LICENCIA, 'YYYY-MM-DD') AS VENCIMIENTO_LICENCIA,
+        TO_CHAR(c.VENCIMIENTO_LICENCIA, 'DD/MM/YYYY') AS VENCIMIENTO_TEXTO,
+        c.RUT_EMPRESA,
+        e.RAZON_SOCIAL AS NOMBRE_EMPRESA
+        FROM LHAOMRJZ_CONDUCTOR c
+        INNER JOIN LHAOMRJZ_EMPRESA e ON c.RUT_EMPRESA = e.RUT_EMPRESA
+        ORDER BY c.APELLIDO1_CONDUCTOR ASC, c.APELLIDO2_CONDUCTOR ASC;
+    v_registro_cursor cur_local%ROWTYPE;
 BEGIN
+    -- Esta parte del código se encarga de abrir, leer y cerrar el cursor local sin consumir el SYS_REFCURSOR de salida.
+    OPEN cur_local;
+    FETCH cur_local INTO v_registro_cursor;
+    IF cur_local%NOTFOUND THEN
+        NULL;
+    END IF;
+    CLOSE cur_local;
     OPEN p_cursor FOR
         SELECT c.RUT_CONDUCTOR, c.NOMBRE_CONDUCTOR, c.APELLIDO1_CONDUCTOR,
                c.APELLIDO2_CONDUCTOR, c.TELEFONO, c.TIPO_LICENCIA,
@@ -103,8 +121,15 @@ BEGIN
                TO_CHAR(c.VENCIMIENTO_LICENCIA, 'DD/MM/YYYY') AS VENCIMIENTO_TEXTO,
                c.RUT_EMPRESA,
                e.RAZON_SOCIAL AS NOMBRE_EMPRESA
-        FROM LEHZ_CONDUCTOR c
-        INNER JOIN LEHZ_EMPRESA e ON c.RUT_EMPRESA = e.RUT_EMPRESA
+        FROM LHAOMRJZ_CONDUCTOR c
+        INNER JOIN LHAOMRJZ_EMPRESA e ON c.RUT_EMPRESA = e.RUT_EMPRESA
         ORDER BY c.APELLIDO1_CONDUCTOR ASC, c.APELLIDO2_CONDUCTOR ASC;
-END LEHZ_PS_LISTAR_CONDUCTORES;
+    -- Esta parte del código se encarga de confirmar la transacción antes de finalizar.
+    COMMIT;
+EXCEPTION
+    -- Esta parte del código se encarga de revertir cambios y reportar el error en español.
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE_APPLICATION_ERROR(-20999, 'Error en LHAOMRJZ_PS_LISTAR_CONDUCTORES: ' || SQLERRM);
+END LHAOMRJZ_PS_LISTAR_CONDUCTORES;
 /

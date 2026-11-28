@@ -1,9 +1,7 @@
-ALTER SESSION SET CURRENT_SCHEMA = LEHZ;
+ALTER SESSION SET CURRENT_SCHEMA = LHAOMRJZ;
 
--- ============================================================================
--- CATALOGO DE REGIONES DE CHILE (referencia fija, no editable desde la app)
--- ============================================================================
-CREATE OR REPLACE VIEW LEHZ_VW_REGIONES_CHILE AS
+-- Esta parte del código se encarga de entregar las regiones de Chile como lista fija.
+CREATE OR REPLACE VIEW LHAOMRJZ_VW_REGIONES_CHILE AS
 SELECT c.ORDEN, c.NOMBRE_REGION
 FROM (
     SELECT 1 AS ORDEN, 'Region de Arica y Parinacota' AS NOMBRE_REGION FROM DUAL UNION ALL
@@ -24,23 +22,44 @@ FROM (
     SELECT 16, 'Region de Magallanes y de la Antartica Chilena' FROM DUAL
 ) c
 WHERE NOT EXISTS (
-    SELECT 1 FROM LEHZ_REGION r WHERE UPPER(r.NOMBRE_REGION) = UPPER(c.NOMBRE_REGION)
+    SELECT 1 FROM LHAOMRJZ_REGION r WHERE UPPER(r.NOMBRE_REGION) = UPPER(c.NOMBRE_REGION)
 );
 
-CREATE OR REPLACE PROCEDURE LEHZ_PS_LISTAR_REGIONES_CHILE (
+CREATE OR REPLACE PROCEDURE LHAOMRJZ_PS_LISTAR_REGIONES_CHILE (
     p_cursor OUT SYS_REFCURSOR
 ) IS
+
+    -- Esta parte del código se encarga de declarar el cursor local de validación sobre la misma consulta.
+    CURSOR cur_local IS
+        SELECT NOMBRE_REGION AS VALOR, NOMBRE_REGION AS ETIQUETA
+        FROM LHAOMRJZ_VW_REGIONES_CHILE
+        ORDER BY ORDEN;
+    v_registro_cursor cur_local%ROWTYPE;
 BEGIN
+    -- Esta parte del código se encarga de abrir, leer y cerrar el cursor local sin consumir el SYS_REFCURSOR de salida.
+    OPEN cur_local;
+    FETCH cur_local INTO v_registro_cursor;
+    IF cur_local%NOTFOUND THEN
+        NULL;
+    END IF;
+    CLOSE cur_local;
     OPEN p_cursor FOR
         SELECT NOMBRE_REGION AS VALOR, NOMBRE_REGION AS ETIQUETA
-        FROM LEHZ_VW_REGIONES_CHILE
+        FROM LHAOMRJZ_VW_REGIONES_CHILE
         ORDER BY ORDEN;
-END LEHZ_PS_LISTAR_REGIONES_CHILE;
+    -- Esta parte del código se encarga de confirmar la transacción antes de finalizar.
+    COMMIT;
+EXCEPTION
+    -- Esta parte del código se encarga de revertir cambios y reportar el error en español.
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE_APPLICATION_ERROR(-20999, 'Error en LHAOMRJZ_PS_LISTAR_REGIONES_CHILE: ' || SQLERRM);
+END LHAOMRJZ_PS_LISTAR_REGIONES_CHILE;
 /
 
--- Evita duplicar nombres de region.
+-- Esta parte del código se encarga de evitar nombres de region repetidos.
 BEGIN
-    EXECUTE IMMEDIATE 'ALTER TABLE LEHZ_REGION ADD CONSTRAINT UQ_LEHZ_REGION_NOMBRE UNIQUE (NOMBRE_REGION)';
+    EXECUTE IMMEDIATE 'ALTER TABLE LHAOMRJZ_REGION ADD CONSTRAINT UQ_LHAOMRJZ_REGION_NOMBRE UNIQUE (NOMBRE_REGION)';
 EXCEPTION
     WHEN OTHERS THEN
         IF SQLCODE != -2260 AND SQLCODE != -2261 THEN
@@ -49,13 +68,11 @@ EXCEPTION
 END;
 /
 
-ALTER SESSION SET CURRENT_SCHEMA = LEHZ;
+ALTER SESSION SET CURRENT_SCHEMA = LHAOMRJZ;
 
--- ============================================================================
--- CATALOGO DE COMUNAS DE CHILE (referencia fija)
--- ============================================================================
+-- Esta parte del código se encarga de entregar las comunas de Chile como lista fija.
 
-CREATE OR REPLACE VIEW LEHZ_VW_COMUNAS_CHILE_ALL AS
+CREATE OR REPLACE VIEW LHAOMRJZ_VW_COMUNAS_CHILE_ALL AS
 SELECT 1 AS ORDEN, 'Algarrobo' AS NOMBRE_COMUNA, 'Region de Valparaiso' AS NOMBRE_REGION FROM DUAL
 UNION ALL
 SELECT 2 AS ORDEN, 'Alhue' AS NOMBRE_COMUNA, 'Region Metropolitana' AS NOMBRE_REGION FROM DUAL
@@ -748,36 +765,59 @@ SELECT 345 AS ORDEN, 'Yungay' AS NOMBRE_COMUNA, 'Region de Nuble' AS NOMBRE_REGI
 UNION ALL
 SELECT 346 AS ORDEN, 'Zapallar' AS NOMBRE_COMUNA, 'Region de Valparaiso' AS NOMBRE_REGION FROM DUAL;
 
-CREATE OR REPLACE VIEW LEHZ_VW_COMUNAS_CHILE AS
+CREATE OR REPLACE VIEW LHAOMRJZ_VW_COMUNAS_CHILE AS
 SELECT a.ORDEN, a.NOMBRE_COMUNA, a.NOMBRE_REGION
-FROM LEHZ_VW_COMUNAS_CHILE_ALL a
+FROM LHAOMRJZ_VW_COMUNAS_CHILE_ALL a
 WHERE EXISTS (
-    SELECT 1 FROM LEHZ_REGION r
+    SELECT 1 FROM LHAOMRJZ_REGION r
      WHERE UPPER(r.NOMBRE_REGION) = UPPER(a.NOMBRE_REGION)
 )
 AND NOT EXISTS (
     SELECT 1
-      FROM LEHZ_COMUNA c
-      JOIN LEHZ_REGION r ON r.ID_REGION = c.ID_REGION
+      FROM LHAOMRJZ_COMUNA c
+      JOIN LHAOMRJZ_REGION r ON r.ID_REGION = c.ID_REGION
      WHERE c.NOMBRE_COMUNA = a.NOMBRE_COMUNA
        AND UPPER(r.NOMBRE_REGION) = UPPER(a.NOMBRE_REGION)
 );
 
-CREATE OR REPLACE PROCEDURE LEHZ_PS_LISTAR_COMUNAS_CHILE (
+CREATE OR REPLACE PROCEDURE LHAOMRJZ_PS_LISTAR_COMUNAS_CHILE (
     p_cursor OUT SYS_REFCURSOR
 ) IS
+
+    -- Esta parte del código se encarga de declarar el cursor local de validación sobre la misma consulta.
+    CURSOR cur_local IS
+        SELECT NOMBRE_COMUNA AS VALOR,
+        NOMBRE_COMUNA || ' (' || NOMBRE_REGION || ')' AS ETIQUETA,
+        NOMBRE_REGION
+        FROM LHAOMRJZ_VW_COMUNAS_CHILE
+        ORDER BY NOMBRE_REGION, NOMBRE_COMUNA;
+    v_registro_cursor cur_local%ROWTYPE;
 BEGIN
+    -- Esta parte del código se encarga de abrir, leer y cerrar el cursor local sin consumir el SYS_REFCURSOR de salida.
+    OPEN cur_local;
+    FETCH cur_local INTO v_registro_cursor;
+    IF cur_local%NOTFOUND THEN
+        NULL;
+    END IF;
+    CLOSE cur_local;
     OPEN p_cursor FOR
         SELECT NOMBRE_COMUNA AS VALOR,
                NOMBRE_COMUNA || ' (' || NOMBRE_REGION || ')' AS ETIQUETA,
                NOMBRE_REGION
-        FROM LEHZ_VW_COMUNAS_CHILE
+        FROM LHAOMRJZ_VW_COMUNAS_CHILE
         ORDER BY NOMBRE_REGION, NOMBRE_COMUNA;
-END LEHZ_PS_LISTAR_COMUNAS_CHILE;
+    -- Esta parte del código se encarga de confirmar la transacción antes de finalizar.
+    COMMIT;
+EXCEPTION
+    -- Esta parte del código se encarga de revertir cambios y reportar el error en español.
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE_APPLICATION_ERROR(-20999, 'Error en LHAOMRJZ_PS_LISTAR_COMUNAS_CHILE: ' || SQLERRM);
+END LHAOMRJZ_PS_LISTAR_COMUNAS_CHILE;
 /
 
 BEGIN
-    EXECUTE IMMEDIATE 'ALTER TABLE LEHZ_COMUNA ADD CONSTRAINT UQ_LEHZ_COMUNA_NOMBRE_REGION UNIQUE (NOMBRE_COMUNA, ID_REGION)';
+    EXECUTE IMMEDIATE 'ALTER TABLE LHAOMRJZ_COMUNA ADD CONSTRAINT UQ_LHAOMRJZ_COMUNA_NOMBRE_REGION UNIQUE (NOMBRE_COMUNA, ID_REGION)';
 EXCEPTION
     WHEN OTHERS THEN
         IF SQLCODE != -2260 AND SQLCODE != -2261 THEN

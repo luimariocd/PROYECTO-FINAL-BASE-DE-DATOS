@@ -1,9 +1,7 @@
-ALTER SESSION SET CURRENT_SCHEMA = LEHZ;
+ALTER SESSION SET CURRENT_SCHEMA = LHAOMRJZ;
 
--- ============================================================================
--- GESTOR 05: ASOCIACION TERMINAL - EMPRESA
--- ============================================================================
-CREATE OR REPLACE PROCEDURE LEHZ_PS_GES_ASOCIAR_TERMINAL(
+-- Esta parte del código se encarga de asociar terminales con empresas.
+CREATE OR REPLACE PROCEDURE LHAOMRJZ_PS_GES_ASOCIAR_TERMINAL(
     p_id_terminal IN NUMBER,
     p_rut_empresa IN VARCHAR2,
     p_opcion      IN VARCHAR2 DEFAULT 'I'
@@ -11,29 +9,29 @@ CREATE OR REPLACE PROCEDURE LEHZ_PS_GES_ASOCIAR_TERMINAL(
     v_rut   VARCHAR2(12);
     v_count NUMBER := 0;
 BEGIN
-    LOCK TABLE LEHZ_UTILIZAN IN EXCLUSIVE MODE;
-    v_rut := LEHZ_FN_NORMALIZAR_RUT(p_rut_empresa, 'EMPRESA');
+    LOCK TABLE LHAOMRJZ_UTILIZAN IN EXCLUSIVE MODE;
+    v_rut := LHAOMRJZ_FN_NORMALIZAR_RUT(p_rut_empresa, 'EMPRESA');
 
     IF p_id_terminal IS NULL OR p_id_terminal <= 0 THEN
         RAISE_APPLICATION_ERROR(-20140, 'Debe seleccionar un terminal valido.');
     END IF;
 
-    SELECT COUNT(*) INTO v_count FROM LEHZ_TERMINAL WHERE ID_TERMINAL = p_id_terminal;
+    v_count := LHAOMRJZ_FN_EXISTE_TERMINAL(p_id_terminal);
     IF v_count = 0 THEN
         RAISE_APPLICATION_ERROR(-20141, 'El terminal no existe.');
     END IF;
 
-    SELECT COUNT(*) INTO v_count FROM LEHZ_EMPRESA WHERE RUT_EMPRESA = v_rut;
+    v_count := LHAOMRJZ_FN_EXISTE_EMPRESA(v_rut);
     IF v_count = 0 THEN
         RAISE_APPLICATION_ERROR(-20142, 'La empresa no existe.');
     END IF;
 
     IF UPPER(TRIM(p_opcion)) = 'I' THEN
-        INSERT INTO LEHZ_UTILIZAN (ID_TERMINAL, RUT_EMPRESA)
+        INSERT INTO LHAOMRJZ_UTILIZAN (ID_TERMINAL, RUT_EMPRESA)
         VALUES (p_id_terminal, v_rut);
 
     ELSIF UPPER(TRIM(p_opcion)) = 'D' THEN
-        DELETE FROM LEHZ_UTILIZAN
+        DELETE FROM LHAOMRJZ_UTILIZAN
          WHERE ID_TERMINAL = p_id_terminal
            AND RUT_EMPRESA = v_rut;
 
@@ -53,21 +51,47 @@ EXCEPTION
     WHEN OTHERS THEN
         ROLLBACK;
         RAISE;
-END LEHZ_PS_GES_ASOCIAR_TERMINAL;
+END LHAOMRJZ_PS_GES_ASOCIAR_TERMINAL;
 /
 
-CREATE OR REPLACE PROCEDURE LEHZ_PS_LISTAR_UTILIZAN(
+CREATE OR REPLACE PROCEDURE LHAOMRJZ_PS_LISTAR_UTILIZAN(
     p_cursor OUT SYS_REFCURSOR
 ) IS
+
+    -- Esta parte del código se encarga de declarar el cursor local de validación sobre la misma consulta.
+    CURSOR cur_local IS
+        SELECT u.ID_TERMINAL, t.NOMBRE AS TERMINAL,
+        c.NOMBRE_COMUNA,
+        u.RUT_EMPRESA, e.RAZON_SOCIAL
+        FROM LHAOMRJZ_UTILIZAN u
+        INNER JOIN LHAOMRJZ_TERMINAL t ON t.ID_TERMINAL = u.ID_TERMINAL
+        INNER JOIN LHAOMRJZ_COMUNA c ON c.ID_COMUNA = t.ID_COMUNA
+        INNER JOIN LHAOMRJZ_EMPRESA e ON e.RUT_EMPRESA = u.RUT_EMPRESA
+        ORDER BY e.RAZON_SOCIAL ASC, t.NOMBRE ASC;
+    v_registro_cursor cur_local%ROWTYPE;
 BEGIN
+    -- Esta parte del código se encarga de abrir, leer y cerrar el cursor local sin consumir el SYS_REFCURSOR de salida.
+    OPEN cur_local;
+    FETCH cur_local INTO v_registro_cursor;
+    IF cur_local%NOTFOUND THEN
+        NULL;
+    END IF;
+    CLOSE cur_local;
     OPEN p_cursor FOR
         SELECT u.ID_TERMINAL, t.NOMBRE AS TERMINAL,
                c.NOMBRE_COMUNA,
                u.RUT_EMPRESA, e.RAZON_SOCIAL
-        FROM LEHZ_UTILIZAN u
-        INNER JOIN LEHZ_TERMINAL t ON t.ID_TERMINAL = u.ID_TERMINAL
-        INNER JOIN LEHZ_COMUNA c ON c.ID_COMUNA = t.ID_COMUNA
-        INNER JOIN LEHZ_EMPRESA e ON e.RUT_EMPRESA = u.RUT_EMPRESA
+        FROM LHAOMRJZ_UTILIZAN u
+        INNER JOIN LHAOMRJZ_TERMINAL t ON t.ID_TERMINAL = u.ID_TERMINAL
+        INNER JOIN LHAOMRJZ_COMUNA c ON c.ID_COMUNA = t.ID_COMUNA
+        INNER JOIN LHAOMRJZ_EMPRESA e ON e.RUT_EMPRESA = u.RUT_EMPRESA
         ORDER BY e.RAZON_SOCIAL ASC, t.NOMBRE ASC;
-END LEHZ_PS_LISTAR_UTILIZAN;
+    -- Esta parte del código se encarga de confirmar la transacción antes de finalizar.
+    COMMIT;
+EXCEPTION
+    -- Esta parte del código se encarga de revertir cambios y reportar el error en español.
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE_APPLICATION_ERROR(-20999, 'Error en LHAOMRJZ_PS_LISTAR_UTILIZAN: ' || SQLERRM);
+END LHAOMRJZ_PS_LISTAR_UTILIZAN;
 /

@@ -1,9 +1,7 @@
-ALTER SESSION SET CURRENT_SCHEMA = LEHZ;
+ALTER SESSION SET CURRENT_SCHEMA = LHAOMRJZ;
 
--- ============================================================================
--- MANTENEDOR 10: HORARIOS
--- ============================================================================
-CREATE OR REPLACE PROCEDURE LEHZ_PS_IUD_HORARIO(
+-- Esta parte del código se encarga de crear el mantenedor de horarios.
+CREATE OR REPLACE PROCEDURE LHAOMRJZ_PS_IUD_HORARIO(
     p_opcion       IN VARCHAR2,
     p_id_horario   IN OUT NUMBER,
     p_horario_val  IN NUMBER DEFAULT NULL,
@@ -12,7 +10,7 @@ CREATE OR REPLACE PROCEDURE LEHZ_PS_IUD_HORARIO(
 ) IS
     v_llegada TIMESTAMP := p_hora_llegada;
 BEGIN
-    LOCK TABLE LEHZ_HORARIO IN ROW EXCLUSIVE MODE;
+    LOCK TABLE LHAOMRJZ_HORARIO IN ROW EXCLUSIVE MODE;
 
     IF UPPER(TRIM(p_opcion)) IN ('I', 'U') THEN
         IF p_horario_val IS NULL OR p_horario_val <= 0 THEN
@@ -21,22 +19,22 @@ BEGIN
         IF p_hora_salida IS NULL OR p_hora_llegada IS NULL THEN
             RAISE_APPLICATION_ERROR(-20090, 'Debe indicar la hora de salida y la hora de llegada.');
         END IF;
-        -- Si la llegada es menor o igual a la salida, se asume que llega al dia siguiente.
+        -- Esta parte del código se encarga de pasar la llegada al dia siguiente si es menor a la salida.
         IF v_llegada <= p_hora_salida THEN
             v_llegada := v_llegada + INTERVAL '1' DAY;
         END IF;
     END IF;
 
     IF UPPER(TRIM(p_opcion)) = 'I' THEN
-        p_id_horario := LEHZ_SEQ_HORARIO.NEXTVAL;
-        INSERT INTO LEHZ_HORARIO (ID_HORARIO, HORARIO, HORA_SALIDA, HORA_LLEGADA)
+        p_id_horario := LHAOMRJZ_SEQ_HORARIO.NEXTVAL;
+        INSERT INTO LHAOMRJZ_HORARIO (ID_HORARIO, HORARIO, HORA_SALIDA, HORA_LLEGADA)
         VALUES (p_id_horario, p_horario_val, p_hora_salida, v_llegada);
 
     ELSIF UPPER(TRIM(p_opcion)) = 'U' THEN
         IF p_id_horario IS NULL OR p_id_horario <= 0 THEN
             RAISE_APPLICATION_ERROR(-20090, 'Debe indicar el horario a actualizar.');
         END IF;
-        UPDATE LEHZ_HORARIO
+        UPDATE LHAOMRJZ_HORARIO
            SET HORARIO = p_horario_val,
                HORA_SALIDA = p_hora_salida,
                HORA_LLEGADA = v_llegada
@@ -50,7 +48,7 @@ BEGIN
         IF p_id_horario IS NULL OR p_id_horario <= 0 THEN
             RAISE_APPLICATION_ERROR(-20092, 'Debe indicar el horario a eliminar.');
         END IF;
-        DELETE FROM LEHZ_HORARIO WHERE ID_HORARIO = p_id_horario;
+        DELETE FROM LHAOMRJZ_HORARIO WHERE ID_HORARIO = p_id_horario;
         IF SQL%ROWCOUNT = 0 THEN
             RAISE_APPLICATION_ERROR(-20092, 'No se encontro el horario a eliminar.');
         END IF;
@@ -70,13 +68,37 @@ EXCEPTION
             RAISE_APPLICATION_ERROR(-20092, 'No se puede eliminar el horario: tiene viajes asociados.');
         END IF;
         RAISE;
-END LEHZ_PS_IUD_HORARIO;
+END LHAOMRJZ_PS_IUD_HORARIO;
 /
 
-CREATE OR REPLACE PROCEDURE LEHZ_PS_LISTAR_HORARIOS(
+CREATE OR REPLACE PROCEDURE LHAOMRJZ_PS_LISTAR_HORARIOS(
     p_cursor OUT SYS_REFCURSOR
 ) IS
+
+    -- Esta parte del código se encarga de declarar el cursor local de validación sobre la misma consulta.
+    CURSOR cur_local IS
+        SELECT ID_HORARIO, HORARIO,
+        TO_CHAR(HORA_SALIDA, 'YYYY-MM-DD"T"HH24:MI') AS HORA_SALIDA,
+        TO_CHAR(HORA_SALIDA, 'DD/MM/YYYY HH24:MI') AS HORA_SALIDA_TEXTO,
+        TO_CHAR(HORA_LLEGADA, 'YYYY-MM-DD"T"HH24:MI') AS HORA_LLEGADA,
+        TO_CHAR(HORA_LLEGADA, 'DD/MM/YYYY HH24:MI') AS HORA_LLEGADA_TEXTO,
+        TO_CHAR(HORA_SALIDA, 'HH24:MI') || ' - ' || TO_CHAR(HORA_LLEGADA, 'HH24:MI') AS RANGO,
+        CASE
+        WHEN TO_NUMBER(TO_CHAR(HORA_SALIDA, 'HH24')) < 12 THEN 'MANANA'
+        WHEN TO_NUMBER(TO_CHAR(HORA_SALIDA, 'HH24')) < 19 THEN 'TARDE'
+        ELSE 'NOCHE'
+        END AS JORNADA
+        FROM LHAOMRJZ_HORARIO
+        ORDER BY HORA_SALIDA ASC;
+    v_registro_cursor cur_local%ROWTYPE;
 BEGIN
+    -- Esta parte del código se encarga de abrir, leer y cerrar el cursor local sin consumir el SYS_REFCURSOR de salida.
+    OPEN cur_local;
+    FETCH cur_local INTO v_registro_cursor;
+    IF cur_local%NOTFOUND THEN
+        NULL;
+    END IF;
+    CLOSE cur_local;
     OPEN p_cursor FOR
         SELECT ID_HORARIO, HORARIO,
                TO_CHAR(HORA_SALIDA, 'YYYY-MM-DD"T"HH24:MI') AS HORA_SALIDA,
@@ -89,7 +111,14 @@ BEGIN
                    WHEN TO_NUMBER(TO_CHAR(HORA_SALIDA, 'HH24')) < 19 THEN 'TARDE'
                    ELSE 'NOCHE'
                END AS JORNADA
-        FROM LEHZ_HORARIO
+        FROM LHAOMRJZ_HORARIO
         ORDER BY HORA_SALIDA ASC;
-END LEHZ_PS_LISTAR_HORARIOS;
+    -- Esta parte del código se encarga de confirmar la transacción antes de finalizar.
+    COMMIT;
+EXCEPTION
+    -- Esta parte del código se encarga de revertir cambios y reportar el error en español.
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE_APPLICATION_ERROR(-20999, 'Error en LHAOMRJZ_PS_LISTAR_HORARIOS: ' || SQLERRM);
+END LHAOMRJZ_PS_LISTAR_HORARIOS;
 /

@@ -1,9 +1,7 @@
-ALTER SESSION SET CURRENT_SCHEMA = LEHZ;
+ALTER SESSION SET CURRENT_SCHEMA = LHAOMRJZ;
 
--- ============================================================================
--- MANTENEDOR 12: PASAJEROS
--- ============================================================================
-CREATE OR REPLACE PROCEDURE LEHZ_PS_IUD_PASAJERO(
+-- Esta parte del código se encarga de crear el mantenedor de pasajeros.
+CREATE OR REPLACE PROCEDURE LHAOMRJZ_PS_IUD_PASAJERO(
     p_opcion      IN VARCHAR2,
     p_rut         IN VARCHAR2,
     p_nombre      IN VARCHAR2 DEFAULT NULL,
@@ -16,11 +14,11 @@ CREATE OR REPLACE PROCEDURE LEHZ_PS_IUD_PASAJERO(
     v_telefono VARCHAR2(20);
     v_correo   VARCHAR2(80);
 BEGIN
-    LOCK TABLE LEHZ_PASAJERO IN ROW EXCLUSIVE MODE;
-    v_rut      := LEHZ_FN_NORMALIZAR_RUT(p_rut, 'PERSONA');
+    LOCK TABLE LHAOMRJZ_PASAJERO IN ROW EXCLUSIVE MODE;
+    v_rut      := LHAOMRJZ_FN_NORMALIZAR_RUT(p_rut, 'PERSONA');
 
     IF UPPER(TRIM(p_opcion)) IN ('I', 'U') THEN
-        v_telefono := LEHZ_FN_VALIDAR_TEL_CL(p_telefono, 'PERSONA');
+        v_telefono := LHAOMRJZ_FN_VALIDAR_TEL_CL(p_telefono, 'PERSONA');
         v_correo   := LOWER(TRIM(p_correo));
         IF p_nombre IS NULL OR TRIM(p_nombre) = '' THEN
             RAISE_APPLICATION_ERROR(-20160, 'El nombre del pasajero es obligatorio.');
@@ -35,19 +33,19 @@ BEGIN
     END IF;
 
     IF UPPER(TRIM(p_opcion)) = 'I' THEN
-        INSERT INTO LEHZ_PASAJERO (
+        INSERT INTO LHAOMRJZ_PASAJERO (
             RUT_PASAJERO, NOMBRE_PASAJERO, APELLIDO1_PASAJERO, APELLIDO2_PASAJERO,
             TELEFONO, CORREO_ELECTRONICO_PASAJERO
         ) VALUES (
-            v_rut, LEHZ_FN_NORMALIZAR_TEXTO(p_nombre), LEHZ_FN_NORMALIZAR_TEXTO(p_apellido1),
-            LEHZ_FN_NORMALIZAR_TEXTO(p_apellido2), v_telefono, v_correo
+            v_rut, LHAOMRJZ_FN_NORMALIZAR_TEXTO(p_nombre), LHAOMRJZ_FN_NORMALIZAR_TEXTO(p_apellido1),
+            LHAOMRJZ_FN_NORMALIZAR_TEXTO(p_apellido2), v_telefono, v_correo
         );
 
     ELSIF UPPER(TRIM(p_opcion)) = 'U' THEN
-        UPDATE LEHZ_PASAJERO
-           SET NOMBRE_PASAJERO = LEHZ_FN_NORMALIZAR_TEXTO(p_nombre),
-               APELLIDO1_PASAJERO = LEHZ_FN_NORMALIZAR_TEXTO(p_apellido1),
-               APELLIDO2_PASAJERO = LEHZ_FN_NORMALIZAR_TEXTO(p_apellido2),
+        UPDATE LHAOMRJZ_PASAJERO
+           SET NOMBRE_PASAJERO = LHAOMRJZ_FN_NORMALIZAR_TEXTO(p_nombre),
+               APELLIDO1_PASAJERO = LHAOMRJZ_FN_NORMALIZAR_TEXTO(p_apellido1),
+               APELLIDO2_PASAJERO = LHAOMRJZ_FN_NORMALIZAR_TEXTO(p_apellido2),
                TELEFONO = v_telefono,
                CORREO_ELECTRONICO_PASAJERO = v_correo
          WHERE RUT_PASAJERO = v_rut;
@@ -57,7 +55,7 @@ BEGIN
         END IF;
 
     ELSIF UPPER(TRIM(p_opcion)) = 'D' THEN
-        DELETE FROM LEHZ_PASAJERO WHERE RUT_PASAJERO = v_rut;
+        DELETE FROM LHAOMRJZ_PASAJERO WHERE RUT_PASAJERO = v_rut;
         IF SQL%ROWCOUNT = 0 THEN
             RAISE_APPLICATION_ERROR(-20162, 'No se encontro el pasajero a eliminar.');
         END IF;
@@ -77,18 +75,41 @@ EXCEPTION
             RAISE_APPLICATION_ERROR(-20162, 'No se puede eliminar el pasajero: tiene boletos o pagos asociados.');
         END IF;
         RAISE;
-END LEHZ_PS_IUD_PASAJERO;
+END LHAOMRJZ_PS_IUD_PASAJERO;
 /
 
-CREATE OR REPLACE PROCEDURE LEHZ_PS_LISTAR_PASAJEROS(
+CREATE OR REPLACE PROCEDURE LHAOMRJZ_PS_LISTAR_PASAJEROS(
     p_cursor OUT SYS_REFCURSOR
 ) IS
+
+    -- Esta parte del código se encarga de declarar el cursor local de validación sobre la misma consulta.
+    CURSOR cur_local IS
+        SELECT RUT_PASAJERO, NOMBRE_PASAJERO, APELLIDO1_PASAJERO, APELLIDO2_PASAJERO,
+        NOMBRE_PASAJERO || ' ' || APELLIDO1_PASAJERO AS NOMBRE_COMPLETO,
+        TELEFONO, CORREO_ELECTRONICO_PASAJERO
+        FROM LHAOMRJZ_PASAJERO
+        ORDER BY APELLIDO1_PASAJERO ASC, APELLIDO2_PASAJERO ASC, NOMBRE_PASAJERO ASC;
+    v_registro_cursor cur_local%ROWTYPE;
 BEGIN
+    -- Esta parte del código se encarga de abrir, leer y cerrar el cursor local sin consumir el SYS_REFCURSOR de salida.
+    OPEN cur_local;
+    FETCH cur_local INTO v_registro_cursor;
+    IF cur_local%NOTFOUND THEN
+        NULL;
+    END IF;
+    CLOSE cur_local;
     OPEN p_cursor FOR
         SELECT RUT_PASAJERO, NOMBRE_PASAJERO, APELLIDO1_PASAJERO, APELLIDO2_PASAJERO,
                NOMBRE_PASAJERO || ' ' || APELLIDO1_PASAJERO AS NOMBRE_COMPLETO,
                TELEFONO, CORREO_ELECTRONICO_PASAJERO
-        FROM LEHZ_PASAJERO
+        FROM LHAOMRJZ_PASAJERO
         ORDER BY APELLIDO1_PASAJERO ASC, APELLIDO2_PASAJERO ASC, NOMBRE_PASAJERO ASC;
-END LEHZ_PS_LISTAR_PASAJEROS;
+    -- Esta parte del código se encarga de confirmar la transacción antes de finalizar.
+    COMMIT;
+EXCEPTION
+    -- Esta parte del código se encarga de revertir cambios y reportar el error en español.
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE_APPLICATION_ERROR(-20999, 'Error en LHAOMRJZ_PS_LISTAR_PASAJEROS: ' || SQLERRM);
+END LHAOMRJZ_PS_LISTAR_PASAJEROS;
 /

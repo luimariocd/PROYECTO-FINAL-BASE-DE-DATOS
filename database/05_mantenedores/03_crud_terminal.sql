@@ -1,9 +1,7 @@
-ALTER SESSION SET CURRENT_SCHEMA = LEHZ;
+ALTER SESSION SET CURRENT_SCHEMA = LHAOMRJZ;
 
--- ============================================================================
--- MANTENEDOR 03: TERMINALES
--- ============================================================================
-CREATE OR REPLACE PROCEDURE LEHZ_PS_IUD_TERMINAL(
+-- Esta parte del código se encarga de crear el mantenedor de terminales.
+CREATE OR REPLACE PROCEDURE LHAOMRJZ_PS_IUD_TERMINAL(
     p_opcion      IN VARCHAR2,
     p_id_terminal IN OUT NUMBER,
     p_nombre      IN VARCHAR2 DEFAULT NULL,
@@ -15,9 +13,9 @@ CREATE OR REPLACE PROCEDURE LEHZ_PS_IUD_TERMINAL(
     v_calle  VARCHAR2(60);
     v_count  NUMBER := 0;
 BEGIN
-    LOCK TABLE LEHZ_TERMINAL IN ROW EXCLUSIVE MODE;
-    v_nombre := LEHZ_FN_NORMALIZAR_TEXTO(p_nombre);
-    v_calle  := LEHZ_FN_NORMALIZAR_TEXTO(p_calle);
+    LOCK TABLE LHAOMRJZ_TERMINAL IN ROW EXCLUSIVE MODE;
+    v_nombre := LHAOMRJZ_FN_NORMALIZAR_TEXTO(p_nombre);
+    v_calle  := LHAOMRJZ_FN_NORMALIZAR_TEXTO(p_calle);
 
     IF UPPER(TRIM(p_opcion)) IN ('I', 'U') THEN
         IF v_nombre IS NULL THEN
@@ -32,22 +30,22 @@ BEGIN
         IF p_id_comuna IS NULL OR p_id_comuna <= 0 THEN
             RAISE_APPLICATION_ERROR(-20024, 'Debe seleccionar una comuna valida.');
         END IF;
-        SELECT COUNT(*) INTO v_count FROM LEHZ_COMUNA WHERE ID_COMUNA = p_id_comuna;
+        v_count := LHAOMRJZ_FN_EXISTE_COMUNA(p_id_comuna);
         IF v_count = 0 THEN
             RAISE_APPLICATION_ERROR(-20024, 'La comuna seleccionada no existe.');
         END IF;
     END IF;
 
     IF UPPER(TRIM(p_opcion)) = 'I' THEN
-        p_id_terminal := LEHZ_SEQ_TERMINAL.NEXTVAL;
-        INSERT INTO LEHZ_TERMINAL (ID_TERMINAL, NOMBRE, CALLE, NUMERO, ID_COMUNA)
+        p_id_terminal := LHAOMRJZ_SEQ_TERMINAL.NEXTVAL;
+        INSERT INTO LHAOMRJZ_TERMINAL (ID_TERMINAL, NOMBRE, CALLE, NUMERO, ID_COMUNA)
         VALUES (p_id_terminal, v_nombre, v_calle, p_numero, p_id_comuna);
 
     ELSIF UPPER(TRIM(p_opcion)) = 'U' THEN
         IF p_id_terminal IS NULL OR p_id_terminal <= 0 THEN
             RAISE_APPLICATION_ERROR(-20024, 'Debe indicar el terminal a actualizar.');
         END IF;
-        UPDATE LEHZ_TERMINAL
+        UPDATE LHAOMRJZ_TERMINAL
            SET NOMBRE = v_nombre,
                CALLE = v_calle,
                NUMERO = p_numero,
@@ -62,7 +60,7 @@ BEGIN
         IF p_id_terminal IS NULL OR p_id_terminal <= 0 THEN
             RAISE_APPLICATION_ERROR(-20025, 'Debe indicar el terminal a eliminar.');
         END IF;
-        DELETE FROM LEHZ_TERMINAL WHERE ID_TERMINAL = p_id_terminal;
+        DELETE FROM LHAOMRJZ_TERMINAL WHERE ID_TERMINAL = p_id_terminal;
         IF SQL%ROWCOUNT = 0 THEN
             RAISE_APPLICATION_ERROR(-20025, 'No se encontro el terminal a eliminar.');
         END IF;
@@ -82,19 +80,43 @@ EXCEPTION
             RAISE_APPLICATION_ERROR(-20025, 'No se puede eliminar el terminal: tiene rutas, asociaciones o bajadas asociadas.');
         END IF;
         RAISE;
-END LEHZ_PS_IUD_TERMINAL;
+END LHAOMRJZ_PS_IUD_TERMINAL;
 /
 
-CREATE OR REPLACE PROCEDURE LEHZ_PS_LISTAR_TERMINALES(
+CREATE OR REPLACE PROCEDURE LHAOMRJZ_PS_LISTAR_TERMINALES(
     p_cursor OUT SYS_REFCURSOR
 ) IS
+
+    -- Esta parte del código se encarga de declarar el cursor local de validación sobre la misma consulta.
+    CURSOR cur_local IS
+        SELECT t.ID_TERMINAL, t.NOMBRE, t.CALLE, t.NUMERO, t.ID_COMUNA,
+        c.NOMBRE_COMUNA, r.NOMBRE_REGION
+        FROM LHAOMRJZ_TERMINAL t
+        INNER JOIN LHAOMRJZ_COMUNA c ON t.ID_COMUNA = c.ID_COMUNA
+        INNER JOIN LHAOMRJZ_REGION r ON c.ID_REGION = r.ID_REGION
+        ORDER BY r.NOMBRE_REGION ASC, c.NOMBRE_COMUNA ASC, t.NOMBRE ASC;
+    v_registro_cursor cur_local%ROWTYPE;
 BEGIN
+    -- Esta parte del código se encarga de abrir, leer y cerrar el cursor local sin consumir el SYS_REFCURSOR de salida.
+    OPEN cur_local;
+    FETCH cur_local INTO v_registro_cursor;
+    IF cur_local%NOTFOUND THEN
+        NULL;
+    END IF;
+    CLOSE cur_local;
     OPEN p_cursor FOR
         SELECT t.ID_TERMINAL, t.NOMBRE, t.CALLE, t.NUMERO, t.ID_COMUNA,
                c.NOMBRE_COMUNA, r.NOMBRE_REGION
-        FROM LEHZ_TERMINAL t
-        INNER JOIN LEHZ_COMUNA c ON t.ID_COMUNA = c.ID_COMUNA
-        INNER JOIN LEHZ_REGION r ON c.ID_REGION = r.ID_REGION
+        FROM LHAOMRJZ_TERMINAL t
+        INNER JOIN LHAOMRJZ_COMUNA c ON t.ID_COMUNA = c.ID_COMUNA
+        INNER JOIN LHAOMRJZ_REGION r ON c.ID_REGION = r.ID_REGION
         ORDER BY r.NOMBRE_REGION ASC, c.NOMBRE_COMUNA ASC, t.NOMBRE ASC;
-END LEHZ_PS_LISTAR_TERMINALES;
+    -- Esta parte del código se encarga de confirmar la transacción antes de finalizar.
+    COMMIT;
+EXCEPTION
+    -- Esta parte del código se encarga de revertir cambios y reportar el error en español.
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE_APPLICATION_ERROR(-20999, 'Error en LHAOMRJZ_PS_LISTAR_TERMINALES: ' || SQLERRM);
+END LHAOMRJZ_PS_LISTAR_TERMINALES;
 /

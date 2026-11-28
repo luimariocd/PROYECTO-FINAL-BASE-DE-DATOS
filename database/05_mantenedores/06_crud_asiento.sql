@@ -1,9 +1,7 @@
-ALTER SESSION SET CURRENT_SCHEMA = LEHZ;
+ALTER SESSION SET CURRENT_SCHEMA = LHAOMRJZ;
 
--- ============================================================================
--- MANTENEDOR 06: ASIENTOS
--- ============================================================================
-CREATE OR REPLACE PROCEDURE LEHZ_PS_IUD_ASIENTO(
+-- Esta parte del código se encarga de crear el mantenedor de asientos.
+CREATE OR REPLACE PROCEDURE LHAOMRJZ_PS_IUD_ASIENTO(
     p_opcion      IN VARCHAR2,
     p_nro_asiento IN NUMBER,
     p_patente     IN VARCHAR2,
@@ -14,10 +12,10 @@ CREATE OR REPLACE PROCEDURE LEHZ_PS_IUD_ASIENTO(
     v_piso    NUMBER := NVL(p_piso, 1);
     v_count   NUMBER := 0;
 BEGIN
-    LOCK TABLE LEHZ_ASIENTO IN ROW EXCLUSIVE MODE;
-    v_patente := LEHZ_FN_NORMALIZAR_PATENTE(p_patente);
+    LOCK TABLE LHAOMRJZ_ASIENTO IN ROW EXCLUSIVE MODE;
+    v_patente := LHAOMRJZ_FN_NORMALIZAR_PATENTE(p_patente);
 
-    SELECT COUNT(*) INTO v_count FROM LEHZ_BUS WHERE PATENTE_BUS = v_patente;
+    v_count := LHAOMRJZ_FN_EXISTE_BUS(v_patente);
     IF v_count = 0 THEN
         RAISE_APPLICATION_ERROR(-20050, 'El bus seleccionado no existe.');
     END IF;
@@ -27,11 +25,11 @@ BEGIN
     END IF;
 
     IF UPPER(TRIM(p_opcion)) = 'I' THEN
-        INSERT INTO LEHZ_ASIENTO (NUMERO_ASIENTO, PATENTE_BUS, PISO, UBICACION)
+        INSERT INTO LHAOMRJZ_ASIENTO (NUMERO_ASIENTO, PATENTE_BUS, PISO, UBICACION)
         VALUES (p_nro_asiento, v_patente, v_piso, UPPER(TRIM(p_ubicacion)));
 
     ELSIF UPPER(TRIM(p_opcion)) = 'U' THEN
-        UPDATE LEHZ_ASIENTO
+        UPDATE LHAOMRJZ_ASIENTO
            SET PISO = v_piso,
                UBICACION = UPPER(TRIM(p_ubicacion))
          WHERE NUMERO_ASIENTO = p_nro_asiento
@@ -42,7 +40,7 @@ BEGIN
         END IF;
 
     ELSIF UPPER(TRIM(p_opcion)) = 'D' THEN
-        DELETE FROM LEHZ_ASIENTO
+        DELETE FROM LHAOMRJZ_ASIENTO
          WHERE NUMERO_ASIENTO = p_nro_asiento
            AND PATENTE_BUS = v_patente;
 
@@ -65,18 +63,41 @@ EXCEPTION
             RAISE_APPLICATION_ERROR(-20052, 'No se puede eliminar el asiento: tiene boletos asociados.');
         END IF;
         RAISE;
-END LEHZ_PS_IUD_ASIENTO;
+END LHAOMRJZ_PS_IUD_ASIENTO;
 /
 
-CREATE OR REPLACE PROCEDURE LEHZ_PS_LISTAR_ASIENTOS(
+CREATE OR REPLACE PROCEDURE LHAOMRJZ_PS_LISTAR_ASIENTOS(
     p_cursor OUT SYS_REFCURSOR
 ) IS
+
+    -- Esta parte del código se encarga de declarar el cursor local de validación sobre la misma consulta.
+    CURSOR cur_local IS
+        SELECT a.NUMERO_ASIENTO, a.PATENTE_BUS, a.PISO, a.UBICACION,
+        b.MARCA || ' ' || b.MODELO AS BUS_DETALLE, b.CAPACIDAD
+        FROM LHAOMRJZ_ASIENTO a
+        INNER JOIN LHAOMRJZ_BUS b ON a.PATENTE_BUS = b.PATENTE_BUS
+        ORDER BY a.PATENTE_BUS, a.NUMERO_ASIENTO ASC;
+    v_registro_cursor cur_local%ROWTYPE;
 BEGIN
+    -- Esta parte del código se encarga de abrir, leer y cerrar el cursor local sin consumir el SYS_REFCURSOR de salida.
+    OPEN cur_local;
+    FETCH cur_local INTO v_registro_cursor;
+    IF cur_local%NOTFOUND THEN
+        NULL;
+    END IF;
+    CLOSE cur_local;
     OPEN p_cursor FOR
         SELECT a.NUMERO_ASIENTO, a.PATENTE_BUS, a.PISO, a.UBICACION,
                b.MARCA || ' ' || b.MODELO AS BUS_DETALLE, b.CAPACIDAD
-        FROM LEHZ_ASIENTO a
-        INNER JOIN LEHZ_BUS b ON a.PATENTE_BUS = b.PATENTE_BUS
+        FROM LHAOMRJZ_ASIENTO a
+        INNER JOIN LHAOMRJZ_BUS b ON a.PATENTE_BUS = b.PATENTE_BUS
         ORDER BY a.PATENTE_BUS, a.NUMERO_ASIENTO ASC;
-END LEHZ_PS_LISTAR_ASIENTOS;
+    -- Esta parte del código se encarga de confirmar la transacción antes de finalizar.
+    COMMIT;
+EXCEPTION
+    -- Esta parte del código se encarga de revertir cambios y reportar el error en español.
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE_APPLICATION_ERROR(-20999, 'Error en LHAOMRJZ_PS_LISTAR_ASIENTOS: ' || SQLERRM);
+END LHAOMRJZ_PS_LISTAR_ASIENTOS;
 /

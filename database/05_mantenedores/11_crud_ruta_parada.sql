@@ -1,9 +1,7 @@
-ALTER SESSION SET CURRENT_SCHEMA = LEHZ;
+ALTER SESSION SET CURRENT_SCHEMA = LHAOMRJZ;
 
--- ============================================================================
--- MANTENEDOR 11: PARADAS INTERMEDIAS POR RUTA
--- ============================================================================
-CREATE OR REPLACE PROCEDURE LEHZ_PS_IUD_RUTA_PARADA(
+-- Esta parte del código se encarga de crear el mantenedor de paradas por ruta.
+CREATE OR REPLACE PROCEDURE LHAOMRJZ_PS_IUD_RUTA_PARADA(
     p_opcion          IN VARCHAR2,
     p_id_ruta_parada  IN OUT NUMBER,
     p_id_ruta         IN NUMBER DEFAULT NULL,
@@ -15,7 +13,7 @@ CREATE OR REPLACE PROCEDURE LEHZ_PS_IUD_RUTA_PARADA(
     v_count NUMBER := 0;
     v_perm  CHAR(1);
 BEGIN
-    LOCK TABLE LEHZ_RUTA_PARADA IN ROW EXCLUSIVE MODE;
+    LOCK TABLE LHAOMRJZ_RUTA_PARADA IN ROW EXCLUSIVE MODE;
     v_perm := UPPER(TRIM(NVL(p_permite_bajada, 'S')));
 
     IF UPPER(TRIM(p_opcion)) IN ('I', 'U') THEN
@@ -35,37 +33,27 @@ BEGIN
             RAISE_APPLICATION_ERROR(-20100, 'El indicador de bajada debe ser S o N.');
         END IF;
 
-        SELECT COUNT(*) INTO v_count FROM LEHZ_RUTA WHERE ID_RUTA = p_id_ruta;
+        v_count := LHAOMRJZ_FN_EXISTE_RUTA(p_id_ruta);
         IF v_count = 0 THEN
             RAISE_APPLICATION_ERROR(-20100, 'La ruta seleccionada no existe.');
         END IF;
-        SELECT COUNT(*) INTO v_count FROM LEHZ_TERMINAL WHERE ID_TERMINAL = p_id_terminal;
+        v_count := LHAOMRJZ_FN_EXISTE_TERMINAL(p_id_terminal);
         IF v_count = 0 THEN
             RAISE_APPLICATION_ERROR(-20100, 'El terminal seleccionado no existe.');
         END IF;
 
-        SELECT COUNT(*) INTO v_count
-          FROM LEHZ_RUTA_PARADA
-         WHERE ID_RUTA = p_id_ruta
-           AND ORDEN_PARADA = p_orden
-           AND ID_RUTA_PARADA <> NVL(p_id_ruta_parada, -1);
-        IF v_count > 0 THEN
+        v_count := LHAOMRJZ_FN_PARADA_ORDEN_EXISTE(p_id_ruta, p_orden, p_id_ruta_parada);        IF v_count > 0 THEN
             RAISE_APPLICATION_ERROR(-20100, 'Ya existe una parada con ese orden en la ruta.');
         END IF;
 
-        SELECT COUNT(*) INTO v_count
-          FROM LEHZ_RUTA_PARADA
-         WHERE ID_RUTA = p_id_ruta
-           AND ID_TERMINAL = p_id_terminal
-           AND ID_RUTA_PARADA <> NVL(p_id_ruta_parada, -1);
-        IF v_count > 0 THEN
+        v_count := LHAOMRJZ_FN_PARADA_TERMINAL_EXISTE(p_id_ruta, p_id_terminal, p_id_ruta_parada);        IF v_count > 0 THEN
             RAISE_APPLICATION_ERROR(-20100, 'Ese terminal ya esta registrado como parada de la ruta.');
         END IF;
     END IF;
 
     IF UPPER(TRIM(p_opcion)) = 'I' THEN
-        p_id_ruta_parada := LEHZ_SEQ_RUTA_PARADA.NEXTVAL;
-        INSERT INTO LEHZ_RUTA_PARADA (
+        p_id_ruta_parada := LHAOMRJZ_SEQ_RUTA_PARADA.NEXTVAL;
+        INSERT INTO LHAOMRJZ_RUTA_PARADA (
             ID_RUTA_PARADA, ID_RUTA, ID_TERMINAL, ORDEN_PARADA,
             MINUTOS_DESDE_ORIG, PERMITE_BAJADA
         ) VALUES (
@@ -77,7 +65,7 @@ BEGIN
         IF p_id_ruta_parada IS NULL OR p_id_ruta_parada <= 0 THEN
             RAISE_APPLICATION_ERROR(-20100, 'Debe indicar la parada a actualizar.');
         END IF;
-        UPDATE LEHZ_RUTA_PARADA
+        UPDATE LHAOMRJZ_RUTA_PARADA
            SET ID_RUTA = p_id_ruta,
                ID_TERMINAL = p_id_terminal,
                ORDEN_PARADA = p_orden,
@@ -93,7 +81,7 @@ BEGIN
         IF p_id_ruta_parada IS NULL OR p_id_ruta_parada <= 0 THEN
             RAISE_APPLICATION_ERROR(-20102, 'Debe indicar la parada a eliminar.');
         END IF;
-        DELETE FROM LEHZ_RUTA_PARADA WHERE ID_RUTA_PARADA = p_id_ruta_parada;
+        DELETE FROM LHAOMRJZ_RUTA_PARADA WHERE ID_RUTA_PARADA = p_id_ruta_parada;
         IF SQL%ROWCOUNT = 0 THEN
             RAISE_APPLICATION_ERROR(-20102, 'No se encontro la parada a eliminar.');
         END IF;
@@ -113,41 +101,96 @@ EXCEPTION
             RAISE_APPLICATION_ERROR(-20102, 'No se puede eliminar la parada: tiene bajadas de pasajeros asociadas.');
         END IF;
         RAISE;
-END LEHZ_PS_IUD_RUTA_PARADA;
+END LHAOMRJZ_PS_IUD_RUTA_PARADA;
 /
 
-CREATE OR REPLACE PROCEDURE LEHZ_PS_LISTAR_RUTA_PARADAS(
+CREATE OR REPLACE PROCEDURE LHAOMRJZ_PS_LISTAR_RUTA_PARADAS(
     p_cursor OUT SYS_REFCURSOR
 ) IS
+
+    -- Esta parte del código se encarga de declarar el cursor local de validación sobre la misma consulta.
+    CURSOR cur_local IS
+        SELECT rp.ID_RUTA_PARADA, rp.ID_RUTA, r.NOMBRE_RUTA,
+        rp.ID_TERMINAL, t.NOMBRE AS TERMINAL,
+        c.NOMBRE_COMUNA, rp.ORDEN_PARADA,
+        rp.MINUTOS_DESDE_ORIG, rp.PERMITE_BAJADA
+        FROM LHAOMRJZ_RUTA_PARADA rp
+        INNER JOIN LHAOMRJZ_RUTA r ON rp.ID_RUTA = r.ID_RUTA
+        INNER JOIN LHAOMRJZ_TERMINAL t ON rp.ID_TERMINAL = t.ID_TERMINAL
+        INNER JOIN LHAOMRJZ_COMUNA c ON t.ID_COMUNA = c.ID_COMUNA
+        ORDER BY r.NOMBRE_RUTA ASC, rp.ORDEN_PARADA ASC;
+    v_registro_cursor cur_local%ROWTYPE;
 BEGIN
+    -- Esta parte del código se encarga de abrir, leer y cerrar el cursor local sin consumir el SYS_REFCURSOR de salida.
+    OPEN cur_local;
+    FETCH cur_local INTO v_registro_cursor;
+    IF cur_local%NOTFOUND THEN
+        NULL;
+    END IF;
+    CLOSE cur_local;
     OPEN p_cursor FOR
         SELECT rp.ID_RUTA_PARADA, rp.ID_RUTA, r.NOMBRE_RUTA,
                rp.ID_TERMINAL, t.NOMBRE AS TERMINAL,
                c.NOMBRE_COMUNA, rp.ORDEN_PARADA,
                rp.MINUTOS_DESDE_ORIG, rp.PERMITE_BAJADA
-        FROM LEHZ_RUTA_PARADA rp
-        INNER JOIN LEHZ_RUTA r ON rp.ID_RUTA = r.ID_RUTA
-        INNER JOIN LEHZ_TERMINAL t ON rp.ID_TERMINAL = t.ID_TERMINAL
-        INNER JOIN LEHZ_COMUNA c ON t.ID_COMUNA = c.ID_COMUNA
+        FROM LHAOMRJZ_RUTA_PARADA rp
+        INNER JOIN LHAOMRJZ_RUTA r ON rp.ID_RUTA = r.ID_RUTA
+        INNER JOIN LHAOMRJZ_TERMINAL t ON rp.ID_TERMINAL = t.ID_TERMINAL
+        INNER JOIN LHAOMRJZ_COMUNA c ON t.ID_COMUNA = c.ID_COMUNA
         ORDER BY r.NOMBRE_RUTA ASC, rp.ORDEN_PARADA ASC;
-END LEHZ_PS_LISTAR_RUTA_PARADAS;
+    -- Esta parte del código se encarga de confirmar la transacción antes de finalizar.
+    COMMIT;
+EXCEPTION
+    -- Esta parte del código se encarga de revertir cambios y reportar el error en español.
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE_APPLICATION_ERROR(-20999, 'Error en LHAOMRJZ_PS_LISTAR_RUTA_PARADAS: ' || SQLERRM);
+END LHAOMRJZ_PS_LISTAR_RUTA_PARADAS;
 /
 
-CREATE OR REPLACE PROCEDURE LEHZ_PS_LISTAR_PARADAS_DE_RUTA(
+CREATE OR REPLACE PROCEDURE LHAOMRJZ_PS_LISTAR_PARADAS_DE_RUTA(
     p_id_ruta IN NUMBER,
     p_cursor  OUT SYS_REFCURSOR
 ) IS
+
+    -- Esta parte del código se encarga de declarar el cursor local de validación sobre la misma consulta.
+    CURSOR cur_local IS
+        SELECT rp.ID_RUTA_PARADA, rp.ID_RUTA, r.NOMBRE_RUTA,
+        rp.ID_TERMINAL, t.NOMBRE AS TERMINAL,
+        c.NOMBRE_COMUNA, rp.ORDEN_PARADA,
+        rp.MINUTOS_DESDE_ORIG, rp.PERMITE_BAJADA
+        FROM LHAOMRJZ_RUTA_PARADA rp
+        INNER JOIN LHAOMRJZ_RUTA r ON rp.ID_RUTA = r.ID_RUTA
+        INNER JOIN LHAOMRJZ_TERMINAL t ON rp.ID_TERMINAL = t.ID_TERMINAL
+        INNER JOIN LHAOMRJZ_COMUNA c ON t.ID_COMUNA = c.ID_COMUNA
+        WHERE rp.ID_RUTA = p_id_ruta
+        ORDER BY rp.ORDEN_PARADA ASC;
+    v_registro_cursor cur_local%ROWTYPE;
 BEGIN
+    -- Esta parte del código se encarga de abrir, leer y cerrar el cursor local sin consumir el SYS_REFCURSOR de salida.
+    OPEN cur_local;
+    FETCH cur_local INTO v_registro_cursor;
+    IF cur_local%NOTFOUND THEN
+        NULL;
+    END IF;
+    CLOSE cur_local;
     OPEN p_cursor FOR
         SELECT rp.ID_RUTA_PARADA, rp.ID_RUTA, r.NOMBRE_RUTA,
                rp.ID_TERMINAL, t.NOMBRE AS TERMINAL,
                c.NOMBRE_COMUNA, rp.ORDEN_PARADA,
                rp.MINUTOS_DESDE_ORIG, rp.PERMITE_BAJADA
-        FROM LEHZ_RUTA_PARADA rp
-        INNER JOIN LEHZ_RUTA r ON rp.ID_RUTA = r.ID_RUTA
-        INNER JOIN LEHZ_TERMINAL t ON rp.ID_TERMINAL = t.ID_TERMINAL
-        INNER JOIN LEHZ_COMUNA c ON t.ID_COMUNA = c.ID_COMUNA
+        FROM LHAOMRJZ_RUTA_PARADA rp
+        INNER JOIN LHAOMRJZ_RUTA r ON rp.ID_RUTA = r.ID_RUTA
+        INNER JOIN LHAOMRJZ_TERMINAL t ON rp.ID_TERMINAL = t.ID_TERMINAL
+        INNER JOIN LHAOMRJZ_COMUNA c ON t.ID_COMUNA = c.ID_COMUNA
         WHERE rp.ID_RUTA = p_id_ruta
         ORDER BY rp.ORDEN_PARADA ASC;
-END LEHZ_PS_LISTAR_PARADAS_DE_RUTA;
+    -- Esta parte del código se encarga de confirmar la transacción antes de finalizar.
+    COMMIT;
+EXCEPTION
+    -- Esta parte del código se encarga de revertir cambios y reportar el error en español.
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE_APPLICATION_ERROR(-20999, 'Error en LHAOMRJZ_PS_LISTAR_PARADAS_DE_RUTA: ' || SQLERRM);
+END LHAOMRJZ_PS_LISTAR_PARADAS_DE_RUTA;
 /

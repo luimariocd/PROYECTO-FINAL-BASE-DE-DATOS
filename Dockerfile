@@ -1,6 +1,6 @@
 FROM php:8.3-cli
 
-# Instalar dependencias necesarias y herramientas para Oracle Instant Client
+# Esta parte del código se encarga de instalar dependencias necesarias y herramientas para Oracle Instant Client. necesarias y herramientas para Oracle Instant Client
 RUN apt-get update && apt-get install -y \
     libaio1t64 \
     unzip \

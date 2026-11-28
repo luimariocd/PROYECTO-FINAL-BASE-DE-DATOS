@@ -1,9 +1,7 @@
-ALTER SESSION SET CURRENT_SCHEMA = LEHZ;
+ALTER SESSION SET CURRENT_SCHEMA = LHAOMRJZ;
 
--- ============================================================================
--- MANTENEDOR 05: BUSES
--- ============================================================================
-CREATE OR REPLACE PROCEDURE LEHZ_PS_IUD_BUS(
+-- Esta parte del código se encarga de crear el mantenedor de buses.
+CREATE OR REPLACE PROCEDURE LHAOMRJZ_PS_IUD_BUS(
     p_opcion        IN VARCHAR2,
     p_patente       IN VARCHAR2,
     p_marca         IN VARCHAR2 DEFAULT NULL,
@@ -20,12 +18,12 @@ CREATE OR REPLACE PROCEDURE LEHZ_PS_IUD_BUS(
     v_count   NUMBER := 0;
     v_tipo    VARCHAR2(20);
 BEGIN
-    LOCK TABLE LEHZ_BUS IN ROW EXCLUSIVE MODE;
-    v_patente := LEHZ_FN_NORMALIZAR_PATENTE(p_patente);
+    LOCK TABLE LHAOMRJZ_BUS IN ROW EXCLUSIVE MODE;
+    v_patente := LHAOMRJZ_FN_NORMALIZAR_PATENTE(p_patente);
     v_tipo    := UPPER(TRIM(NVL(p_tipo_servicio, 'NORMAL')));
 
     IF UPPER(TRIM(p_opcion)) IN ('I', 'U') THEN
-        v_rut := LEHZ_FN_NORMALIZAR_RUT(p_rut_empresa, 'EMPRESA');
+        v_rut := LHAOMRJZ_FN_NORMALIZAR_RUT(p_rut_empresa, 'EMPRESA');
         IF p_capacidad IS NULL OR p_capacidad <= 0 THEN
             RAISE_APPLICATION_ERROR(-20040, 'La capacidad del bus debe ser mayor que cero.');
         END IF;
@@ -42,32 +40,29 @@ BEGIN
             RAISE_APPLICATION_ERROR(-20040, 'La tarifa base debe ser mayor que cero.');
         END IF;
 
-        SELECT COUNT(*) INTO v_count FROM LEHZ_EMPRESA WHERE RUT_EMPRESA = v_rut;
+        v_count := LHAOMRJZ_FN_EXISTE_EMPRESA(v_rut);
         IF v_count = 0 THEN
             RAISE_APPLICATION_ERROR(-20040, 'La empresa seleccionada no existe.');
         END IF;
     END IF;
 
     IF UPPER(TRIM(p_opcion)) = 'I' THEN
-        INSERT INTO LEHZ_BUS (
+        INSERT INTO LHAOMRJZ_BUS (
             PATENTE_BUS, MARCA, MODELO, ANIO_FABRICACION, CAPACIDAD,
             TIPO_SERVICIO, CANTIDAD_PISOS, TARIFA_BASE, RUT_EMPRESA
         ) VALUES (
-            v_patente, LEHZ_FN_NORMALIZAR_TEXTO(p_marca), LEHZ_FN_NORMALIZAR_TEXTO(p_modelo),
+            v_patente, LHAOMRJZ_FN_NORMALIZAR_TEXTO(p_marca), LHAOMRJZ_FN_NORMALIZAR_TEXTO(p_modelo),
             p_anio, p_capacidad, v_tipo, p_cantidad_pisos, ROUND(p_tarifa_base), v_rut
         );
 
     ELSIF UPPER(TRIM(p_opcion)) = 'U' THEN
-        SELECT COUNT(*) INTO v_count
-          FROM LEHZ_ASIENTO
-         WHERE PATENTE_BUS = v_patente;
-        IF p_capacidad < v_count THEN
+        v_count := LHAOMRJZ_FN_CONTAR_ASIENTOS(v_patente);        IF p_capacidad < v_count THEN
             RAISE_APPLICATION_ERROR(-20040, 'La capacidad no puede ser menor que los ' || v_count || ' asientos ya registrados.');
         END IF;
 
-        UPDATE LEHZ_BUS
-           SET MARCA = LEHZ_FN_NORMALIZAR_TEXTO(p_marca),
-               MODELO = LEHZ_FN_NORMALIZAR_TEXTO(p_modelo),
+        UPDATE LHAOMRJZ_BUS
+           SET MARCA = LHAOMRJZ_FN_NORMALIZAR_TEXTO(p_marca),
+               MODELO = LHAOMRJZ_FN_NORMALIZAR_TEXTO(p_modelo),
                ANIO_FABRICACION = p_anio,
                CAPACIDAD = p_capacidad,
                TIPO_SERVICIO = v_tipo,
@@ -81,7 +76,7 @@ BEGIN
         END IF;
 
     ELSIF UPPER(TRIM(p_opcion)) = 'D' THEN
-        DELETE FROM LEHZ_BUS WHERE PATENTE_BUS = v_patente;
+        DELETE FROM LHAOMRJZ_BUS WHERE PATENTE_BUS = v_patente;
         IF SQL%ROWCOUNT = 0 THEN
             RAISE_APPLICATION_ERROR(-20042, 'No se encontro el bus a eliminar.');
         END IF;
@@ -101,19 +96,43 @@ EXCEPTION
             RAISE_APPLICATION_ERROR(-20042, 'No se puede eliminar el bus: tiene asientos, viajes o mantenciones asociadas.');
         END IF;
         RAISE;
-END LEHZ_PS_IUD_BUS;
+END LHAOMRJZ_PS_IUD_BUS;
 /
 
-CREATE OR REPLACE PROCEDURE LEHZ_PS_LISTAR_BUSES(
+CREATE OR REPLACE PROCEDURE LHAOMRJZ_PS_LISTAR_BUSES(
     p_cursor OUT SYS_REFCURSOR
 ) IS
+
+    -- Esta parte del código se encarga de declarar el cursor local de validación sobre la misma consulta.
+    CURSOR cur_local IS
+        SELECT b.PATENTE_BUS, b.MARCA, b.MODELO, b.ANIO_FABRICACION, b.CAPACIDAD,
+        b.TIPO_SERVICIO, b.CANTIDAD_PISOS, b.TARIFA_BASE,
+        b.RUT_EMPRESA, e.RAZON_SOCIAL AS NOMBRE_EMPRESA
+        FROM LHAOMRJZ_BUS b
+        INNER JOIN LHAOMRJZ_EMPRESA e ON b.RUT_EMPRESA = e.RUT_EMPRESA
+        ORDER BY b.PATENTE_BUS ASC;
+    v_registro_cursor cur_local%ROWTYPE;
 BEGIN
+    -- Esta parte del código se encarga de abrir, leer y cerrar el cursor local sin consumir el SYS_REFCURSOR de salida.
+    OPEN cur_local;
+    FETCH cur_local INTO v_registro_cursor;
+    IF cur_local%NOTFOUND THEN
+        NULL;
+    END IF;
+    CLOSE cur_local;
     OPEN p_cursor FOR
         SELECT b.PATENTE_BUS, b.MARCA, b.MODELO, b.ANIO_FABRICACION, b.CAPACIDAD,
                b.TIPO_SERVICIO, b.CANTIDAD_PISOS, b.TARIFA_BASE,
                b.RUT_EMPRESA, e.RAZON_SOCIAL AS NOMBRE_EMPRESA
-        FROM LEHZ_BUS b
-        INNER JOIN LEHZ_EMPRESA e ON b.RUT_EMPRESA = e.RUT_EMPRESA
+        FROM LHAOMRJZ_BUS b
+        INNER JOIN LHAOMRJZ_EMPRESA e ON b.RUT_EMPRESA = e.RUT_EMPRESA
         ORDER BY b.PATENTE_BUS ASC;
-END LEHZ_PS_LISTAR_BUSES;
+    -- Esta parte del código se encarga de confirmar la transacción antes de finalizar.
+    COMMIT;
+EXCEPTION
+    -- Esta parte del código se encarga de revertir cambios y reportar el error en español.
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE_APPLICATION_ERROR(-20999, 'Error en LHAOMRJZ_PS_LISTAR_BUSES: ' || SQLERRM);
+END LHAOMRJZ_PS_LISTAR_BUSES;
 /

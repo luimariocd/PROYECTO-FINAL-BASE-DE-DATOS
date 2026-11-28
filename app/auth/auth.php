@@ -14,7 +14,7 @@ function auth_can(array $roles): bool {
 }
 
 function auth_login(string $username, string $password): array {
-    $rows = db_rows('LEHZ_PS_LOGIN', [
+    $rows = db_rows('LHAOMRJZ_PS_LOGIN', [
         'p_username' => trim($username),
         'p_password' => $password,
     ]);

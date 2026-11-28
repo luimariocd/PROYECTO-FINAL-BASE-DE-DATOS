@@ -5,19 +5,68 @@
         return document.getElementById(id);
     }
 
-    function showModal(id) {
+    function showModal(id, focusSelector) {
         var modal = byId(id);
-        if (modal) modal.classList.add('show');
+        if (!modal) return;
+        function focusTarget() {
+            if (!focusSelector) return;
+            var el = modal.querySelector(focusSelector);
+            if (el) { el.focus(); el.click(); }
+        }
+        if (window.bootstrap && bootstrap.Modal) {
+            modal.addEventListener('shown.bs.modal', focusTarget, { once: true });
+            bootstrap.Modal.getOrCreateInstance(modal).show();
+        } else {
+            modal.classList.add('show');
+            modal.style.display = 'block';
+            focusTarget();
+        }
     }
 
     function hideModal(id) {
         var modal = byId(id);
-        if (modal) modal.classList.remove('show');
+        if (!modal) return;
+        if (window.bootstrap && bootstrap.Modal) {
+            var instance = bootstrap.Modal.getInstance(modal);
+            if (instance) instance.hide();
+        } else {
+            modal.classList.remove('show');
+            modal.style.display = '';
+        }
+    }
+
+    function setPhoneField(fieldName, value) {
+        var hidden = byId('field_' + fieldName);
+        var num = byId('num_' + fieldName);
+        var prefix = document.querySelector('.phone-prefix[data-target="field_' + fieldName + '"]');
+        if (!hidden || !num || !prefix) return;
+        var raw = value === undefined || value === null ? '' : String(value);
+        var selected = '+56 9';
+        var rest = raw;
+        if (raw.indexOf('+56 9') === 0) {
+            rest = raw.substring(5).trim();
+        } else if (raw.indexOf('+569') === 0) {
+            rest = raw.substring(4).trim();
+        } else if (raw.indexOf('600') === 0) {
+            selected = '600';
+            rest = raw.substring(3).trim();
+        } else if (raw.indexOf('809') === 0) {
+            selected = '809';
+            rest = raw.substring(3).trim();
+        } else if (raw.indexOf('+56') === 0) {
+            rest = raw.substring(4).trim();
+        }
+        if (selected === '+56 9' && rest.length === 9 && rest.charAt(0) === '9') {
+            rest = rest.substring(1);
+        }
+        prefix.value = selected;
+        num.value = rest;
+        hidden.value = raw;
     }
 
     window.openCreate = function () {
         var form = byId('recordForm');
-        var cfg = window.LEHZ_MAINTAINER;
+        var cfg = window.LHAOMRJZ_MAINTAINER;
         if (!form || !cfg) return;
         form.reset();
         byId('formOp').value = 'I';
@@ -34,13 +83,16 @@
         cfg.fields.forEach(function (field) {
             var el = byId('field_' + field.name);
             if (el) el.value = '';
+            var ac = byId('ac_' + field.name);
+            if (ac) ac.value = '';
+            if (field.type === 'tel') setPhoneField(field.name, '');
         });
-        showModal('recordModal');
+        showModal('recordModal', '.ac-input');
     };
 
     window.editMaintainer = function (row) {
         var form = byId('recordForm');
-        var cfg = window.LEHZ_MAINTAINER;
+        var cfg = window.LHAOMRJZ_MAINTAINER;
         if (!form || !cfg) return;
         form.reset();
         byId('formOp').value = 'U';
@@ -55,12 +107,26 @@
             }
         });
         cfg.fields.forEach(function (field) {
+            var value = row[field.name] !== undefined && row[field.name] !== null ? row[field.name] : '';
             var el = byId('field_' + field.name);
-            if (el) {
-                el.value = row[field.name] !== undefined && row[field.name] !== null ? row[field.name] : '';
+            if (el && el.type === 'time' && String(value).indexOf('T') !== -1) {
+                value = String(value).substring(11, 16);
+            }
+            if (el) el.value = value;
+            var ac = byId('ac_' + field.name);
+            if (ac) ac.value = value;
+            if (field.type === 'tel') {
+                setPhoneField(field.name, row[field.name]);
             }
         });
-        showModal('recordModal');
+        var fechaHorario = byId('field_FECHA_HORARIO');
+        if (fechaHorario && !fechaHorario.value && row.HORA_SALIDA) {
+            var salida = String(row.HORA_SALIDA);
+            if (/^\d{4}-\d{2}-\d{2}/.test(salida)) {
+                fechaHorario.value = salida.substring(0, 10);
+            }
+        }
+        showModal('recordModal', '.ac-input');
     };
 
     window.closeModal = function () {
@@ -140,22 +206,12 @@
 
     document.addEventListener('click', function (event) {
         if (event.target.matches('[data-toggle-password]')) {
-            var wrap = event.target.closest('.password-field');
+            var wrap = event.target.closest('.input-group') || event.target.closest('.password-field');
             var input = wrap ? wrap.querySelector('input') : null;
             if (!input) return;
             var show = input.type === 'password';
             input.type = show ? 'text' : 'password';
             event.target.textContent = show ? 'Ocultar' : 'Mostrar';
-        }
-        if (event.target.id === 'recordModal' || event.target.id === 'annulModal') {
-            event.target.classList.remove('show');
-        }
-    });
-
-    document.addEventListener('keydown', function (event) {
-        if (event.key === 'Escape') {
-            hideModal('recordModal');
-            hideModal('annulModal');
         }
     });
 
@@ -201,11 +257,48 @@
     });
 })();
 
+    function filterTableRows(target, q) {
+        var body = target.tagName === 'TBODY' ? target : (target.tBodies[0] || target);
+        if (!body || !body.querySelectorAll) return;
+        var rows = Array.prototype.filter.call(body.querySelectorAll('tr'), function (row) {
+            return !row.hasAttribute('data-filter-empty');
+        });
+        var empty = body.querySelector('[data-filter-empty]');
+        var visible = 0;
+        rows.forEach(function (row) {
+            var show = q === '' || row.textContent.toLowerCase().indexOf(q) !== -1;
+            row.hidden = !show;
+            if (show) visible++;
+        });
+        if (q !== '' && visible === 0) {
+            if (!empty) {
+                var table = body.closest ? body.closest('table') : null;
+                var total = table ? table.querySelectorAll('thead th').length : 0;
+                if (!total && rows.length) total = rows[0].cells.length;
+                empty = document.createElement('tr');
+                empty.setAttribute('data-filter-empty', '');
+                var cell = document.createElement('td');
+                cell.colSpan = total || 1;
+                cell.className = 'text-center text-body-secondary py-4';
+                cell.textContent = 'Sin resultados para este filtro.';
+                empty.appendChild(cell);
+                body.appendChild(empty);
+            }
+            empty.hidden = false;
+        } else if (empty) {
+            empty.hidden = true;
+        }
+    }
+
     function filterSelect(input) {
         var target = document.getElementById(input.getAttribute('data-filter'));
         if (!target) return;
-        if (!target._originalHTML) target._originalHTML = target.innerHTML;
         var q = input.value.trim().toLowerCase();
+        if (target.tagName === 'TBODY' || target.tagName === 'TABLE') {
+            filterTableRows(target, q);
+            return;
+        }
+        if (!target._originalHTML) target._originalHTML = target.innerHTML;
         if (q === '') {
             target.innerHTML = target._originalHTML;
             return;
@@ -251,7 +344,7 @@
             var input = document.getElementById('ac_' + fieldName);
             var dd = document.getElementById('acdd_' + fieldName);
             if (!hidden || !input || !dd) return;
-            var opts = (window.LEHZ_AC && window.LEHZ_AC[fieldName]) || [];
+            var opts = (window.LHAOMRJZ_AC && window.LHAOMRJZ_AC[fieldName]) || [];
             function render(q) {
                 q = (q || '').trim().toLowerCase();
                 var groups = {};
@@ -265,12 +358,12 @@
                 });
                 var html = '';
                 order.forEach(function (g) {
-                    if (g) html += '<div class="ac-group">' + g + '</div>';
+                    if (g) html += '<div class="list-group-item ac-group">' + g + '</div>';
                     groups[g].forEach(function (o) {
-                        html += '<div class="ac-option" data-value="' + String(o.value).replace(/"/g, '&quot;') + '">' + o.label + '</div>';
+                        html += '<div class="list-group-item list-group-item-action ac-option" data-value="' + String(o.value).replace(/"/g, '&quot;') + '">' + o.label + '</div>';
                     });
                 });
-                if (!html) html = '<div class="ac-empty">Sin resultados</div>';
+                if (!html) html = '<div class="list-group-item text-body-secondary ac-empty">Sin resultados</div>';
                 dd.innerHTML = html;
                 dd.style.display = 'block';
             }
@@ -290,8 +383,8 @@
             });
         }
         document.addEventListener('DOMContentLoaded', function () {
-            if (window.LEHZ_AC) {
-                Object.keys(window.LEHZ_AC).forEach(setupAC);
+            if (window.LHAOMRJZ_AC) {
+                Object.keys(window.LHAOMRJZ_AC).forEach(setupAC);
             }
         });
     })();
@@ -301,8 +394,15 @@
         var numInput = document.getElementById('num_' + fieldName);
         var prefixSel = document.querySelector('.phone-prefix[data-target="field_' + fieldName + '"]');
         if (!hidden || !numInput || !prefixSel) return;
-        var num = numInput.value.trim().replace(/^\+?56\s*9?\s*/, '').replace(/^600\s*/, '').replace(/^809\s*/, '').trim();
-        hidden.value = num ? (prefixSel.value + ' ' + num) : '';
+        var prefix = prefixSel.value;
+        var num = numInput.value.replace(/\D+/g, '');
+        if (prefix === '+56 9') {
+            if (num.length === 9 && num.charAt(0) === '9') num = num.substring(1);
+            if (num.length === 11 && num.substring(0, 3) === '569') num = num.substring(3);
+        } else if (num.indexOf(prefix) === 0) {
+            num = num.substring(3);
+        }
+        hidden.value = num ? (prefix + ' ' + num) : '';
     }
 
     document.addEventListener('input', function (event) {
@@ -324,7 +424,7 @@
     });
 
     (function sidebarScroll() {
-        var sb = document.querySelector('.sidebar');
+        var sb = document.querySelector('.sidebar-wrapper') || document.querySelector('.sidebar');
         if (!sb) return;
         var key = 'sidebarScroll';
         var saved = sessionStorage.getItem(key);

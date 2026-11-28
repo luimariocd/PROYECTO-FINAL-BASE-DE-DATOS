@@ -1,0 +1,32 @@
+-- Esta parte del código se encarga de eliminar objetos heredados que no pertenecen al sistema LHAOMRJZ.
+ALTER SESSION SET CURRENT_SCHEMA = LHAOMRJZ;
+
+WHENEVER SQLERROR CONTINUE
+PURGE RECYCLEBIN;
+WHENEVER SQLERROR EXIT SQL.SQLCODE
+
+BEGIN
+    FOR r IN (SELECT table_name FROM USER_TABLES WHERE table_name LIKE 'LHAOMRJZ_BAK_%') LOOP
+        EXECUTE IMMEDIATE 'DROP TABLE ' || DBMS_ASSERT.SIMPLE_SQL_NAME(r.table_name) || ' CASCADE CONSTRAINTS';
+    END LOOP;
+END;
+/
+
+BEGIN
+    FOR r IN (SELECT object_name FROM USER_OBJECTS WHERE object_type = 'PROCEDURE' AND object_name LIKE 'SP\_%' ESCAPE '\') LOOP
+        EXECUTE IMMEDIATE 'DROP PROCEDURE ' || DBMS_ASSERT.SIMPLE_SQL_NAME(r.object_name);
+    END LOOP;
+END;
+/
+
+BEGIN
+    EXECUTE IMMEDIATE 'DROP SEQUENCE LHAOMRJZ_SEQ_USUSARIO';
+EXCEPTION
+    WHEN OTHERS THEN
+        IF SQLCODE != -2289 THEN
+            RAISE;
+        END IF;
+END;
+/
+
+PROMPT == Limpieza de objetos heredados completada. ==

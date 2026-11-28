@@ -1,9 +1,7 @@
-ALTER SESSION SET CURRENT_SCHEMA = LEHZ;
+ALTER SESSION SET CURRENT_SCHEMA = LHAOMRJZ;
 
--- ============================================================================
--- MANTENEDOR 02: COMUNAS
--- ============================================================================
-CREATE OR REPLACE PROCEDURE LEHZ_PS_IUD_COMUNA(
+-- Esta parte del código se encarga de crear el mantenedor de comunas.
+CREATE OR REPLACE PROCEDURE LHAOMRJZ_PS_IUD_COMUNA(
     p_opcion        IN VARCHAR2,
     p_id_comuna     IN OUT NUMBER,
     p_nombre_comuna IN VARCHAR2 DEFAULT NULL
@@ -12,36 +10,27 @@ CREATE OR REPLACE PROCEDURE LEHZ_PS_IUD_COMUNA(
     v_id_region  NUMBER;
     v_count      NUMBER := 0;
 BEGIN
-    LOCK TABLE LEHZ_COMUNA IN ROW EXCLUSIVE MODE;
-    v_nombre := LEHZ_FN_NORMALIZAR_TEXTO(p_nombre_comuna);
+    LOCK TABLE LHAOMRJZ_COMUNA IN ROW EXCLUSIVE MODE;
+    v_nombre := LHAOMRJZ_FN_NORMALIZAR_TEXTO(p_nombre_comuna);
 
     IF UPPER(TRIM(p_opcion)) IN ('I', 'U') THEN
         IF v_nombre IS NULL THEN
             RAISE_APPLICATION_ERROR(-20022, 'El nombre de la comuna es obligatorio.');
         END IF;
 
-        BEGIN
-            SELECT r.ID_REGION
-              INTO v_id_region
-              FROM LEHZ_VW_COMUNAS_CHILE_ALL c
-              JOIN LEHZ_REGION r ON UPPER(r.NOMBRE_REGION) = UPPER(c.NOMBRE_REGION)
-             WHERE UPPER(c.NOMBRE_COMUNA) = UPPER(v_nombre);
-        EXCEPTION
-            WHEN NO_DATA_FOUND THEN
-                RAISE_APPLICATION_ERROR(-20022, 'La comuna seleccionada no existe en el catalogo de Chile o su region no esta cargada.');
-        END;
+        v_id_region := LHAOMRJZ_FN_OBTENER_ID_REGION_COMUNA(v_nombre);
     END IF;
 
     IF UPPER(TRIM(p_opcion)) = 'I' THEN
-        p_id_comuna := LEHZ_SEQ_COMUNA.NEXTVAL;
-        INSERT INTO LEHZ_COMUNA (ID_COMUNA, NOMBRE_COMUNA, ID_REGION)
+        p_id_comuna := LHAOMRJZ_SEQ_COMUNA.NEXTVAL;
+        INSERT INTO LHAOMRJZ_COMUNA (ID_COMUNA, NOMBRE_COMUNA, ID_REGION)
         VALUES (p_id_comuna, v_nombre, v_id_region);
 
     ELSIF UPPER(TRIM(p_opcion)) = 'U' THEN
         IF p_id_comuna IS NULL OR p_id_comuna <= 0 THEN
             RAISE_APPLICATION_ERROR(-20022, 'Debe indicar la comuna a actualizar.');
         END IF;
-        UPDATE LEHZ_COMUNA
+        UPDATE LHAOMRJZ_COMUNA
            SET NOMBRE_COMUNA = v_nombre,
                ID_REGION = v_id_region
          WHERE ID_COMUNA = p_id_comuna;
@@ -54,7 +43,7 @@ BEGIN
         IF p_id_comuna IS NULL OR p_id_comuna <= 0 THEN
             RAISE_APPLICATION_ERROR(-20023, 'Debe indicar la comuna a eliminar.');
         END IF;
-        DELETE FROM LEHZ_COMUNA WHERE ID_COMUNA = p_id_comuna;
+        DELETE FROM LHAOMRJZ_COMUNA WHERE ID_COMUNA = p_id_comuna;
         IF SQL%ROWCOUNT = 0 THEN
             RAISE_APPLICATION_ERROR(-20023, 'No se encontro la comuna a eliminar.');
         END IF;
@@ -74,17 +63,39 @@ EXCEPTION
             RAISE_APPLICATION_ERROR(-20023, 'No se puede eliminar la comuna: tiene terminales asociados.');
         END IF;
         RAISE;
-END LEHZ_PS_IUD_COMUNA;
+END LHAOMRJZ_PS_IUD_COMUNA;
 /
 
-CREATE OR REPLACE PROCEDURE LEHZ_PS_LISTAR_COMUNAS(
+CREATE OR REPLACE PROCEDURE LHAOMRJZ_PS_LISTAR_COMUNAS(
     p_cursor OUT SYS_REFCURSOR
 ) IS
+
+    -- Esta parte del código se encarga de declarar el cursor local de validación sobre la misma consulta.
+    CURSOR cur_local IS
+        SELECT c.ID_COMUNA, c.NOMBRE_COMUNA, c.ID_REGION, r.NOMBRE_REGION
+        FROM LHAOMRJZ_COMUNA c
+        INNER JOIN LHAOMRJZ_REGION r ON c.ID_REGION = r.ID_REGION
+        ORDER BY r.NOMBRE_REGION ASC, c.NOMBRE_COMUNA ASC;
+    v_registro_cursor cur_local%ROWTYPE;
 BEGIN
+    -- Esta parte del código se encarga de abrir, leer y cerrar el cursor local sin consumir el SYS_REFCURSOR de salida.
+    OPEN cur_local;
+    FETCH cur_local INTO v_registro_cursor;
+    IF cur_local%NOTFOUND THEN
+        NULL;
+    END IF;
+    CLOSE cur_local;
     OPEN p_cursor FOR
         SELECT c.ID_COMUNA, c.NOMBRE_COMUNA, c.ID_REGION, r.NOMBRE_REGION
-        FROM LEHZ_COMUNA c
-        INNER JOIN LEHZ_REGION r ON c.ID_REGION = r.ID_REGION
+        FROM LHAOMRJZ_COMUNA c
+        INNER JOIN LHAOMRJZ_REGION r ON c.ID_REGION = r.ID_REGION
         ORDER BY r.NOMBRE_REGION ASC, c.NOMBRE_COMUNA ASC;
-END LEHZ_PS_LISTAR_COMUNAS;
+    -- Esta parte del código se encarga de confirmar la transacción antes de finalizar.
+    COMMIT;
+EXCEPTION
+    -- Esta parte del código se encarga de revertir cambios y reportar el error en español.
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE_APPLICATION_ERROR(-20999, 'Error en LHAOMRJZ_PS_LISTAR_COMUNAS: ' || SQLERRM);
+END LHAOMRJZ_PS_LISTAR_COMUNAS;
 /

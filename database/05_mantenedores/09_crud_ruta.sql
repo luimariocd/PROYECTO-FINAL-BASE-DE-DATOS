@@ -1,9 +1,7 @@
-ALTER SESSION SET CURRENT_SCHEMA = LEHZ;
+ALTER SESSION SET CURRENT_SCHEMA = LHAOMRJZ;
 
--- ============================================================================
--- MANTENEDOR 09: RUTAS
--- ============================================================================
-CREATE OR REPLACE PROCEDURE LEHZ_PS_IUD_RUTA(
+-- Esta parte del código se encarga de crear el mantenedor de rutas.
+CREATE OR REPLACE PROCEDURE LHAOMRJZ_PS_IUD_RUTA(
     p_opcion              IN VARCHAR2,
     p_id_ruta             IN OUT NUMBER,
     p_nombre_ruta         IN VARCHAR2 DEFAULT NULL,
@@ -17,8 +15,8 @@ CREATE OR REPLACE PROCEDURE LEHZ_PS_IUD_RUTA(
     v_nombre VARCHAR2(120);
     v_count  NUMBER := 0;
 BEGIN
-    LOCK TABLE LEHZ_RUTA IN ROW EXCLUSIVE MODE;
-    v_nombre := LEHZ_FN_NORMALIZAR_TEXTO(p_nombre_ruta);
+    LOCK TABLE LHAOMRJZ_RUTA IN ROW EXCLUSIVE MODE;
+    v_nombre := LHAOMRJZ_FN_NORMALIZAR_TEXTO(p_nombre_ruta);
 
     IF UPPER(TRIM(p_opcion)) IN ('I', 'U') THEN
         IF v_nombre IS NULL THEN
@@ -40,19 +38,19 @@ BEGIN
             RAISE_APPLICATION_ERROR(-20080, 'Los minutos estimados deben estar entre 0 y 59.');
         END IF;
 
-        SELECT COUNT(*) INTO v_count FROM LEHZ_TERMINAL WHERE ID_TERMINAL = p_id_terminal_origen;
+        v_count := LHAOMRJZ_FN_EXISTE_TERMINAL(p_id_terminal_origen);
         IF v_count = 0 THEN
             RAISE_APPLICATION_ERROR(-20080, 'El terminal de origen no existe.');
         END IF;
-        SELECT COUNT(*) INTO v_count FROM LEHZ_TERMINAL WHERE ID_TERMINAL = p_id_terminal_destino;
+        v_count := LHAOMRJZ_FN_EXISTE_TERMINAL(p_id_terminal_destino);
         IF v_count = 0 THEN
             RAISE_APPLICATION_ERROR(-20080, 'El terminal de destino no existe.');
         END IF;
     END IF;
 
     IF UPPER(TRIM(p_opcion)) = 'I' THEN
-        p_id_ruta := LEHZ_SEQ_RUTA.NEXTVAL;
-        INSERT INTO LEHZ_RUTA (
+        p_id_ruta := LHAOMRJZ_SEQ_RUTA.NEXTVAL;
+        INSERT INTO LHAOMRJZ_RUTA (
             ID_RUTA, HORARIO, DISTANCIA, HORAS_ESTIMADAS, MINUTOS_ESTIMADOS,
             NOMBRE_RUTA, ID_TERMINAL_ORIGEN, ID_TERMINAL_DESTINO
         ) VALUES (
@@ -64,7 +62,7 @@ BEGIN
         IF p_id_ruta IS NULL OR p_id_ruta <= 0 THEN
             RAISE_APPLICATION_ERROR(-20080, 'Debe indicar la ruta a actualizar.');
         END IF;
-        UPDATE LEHZ_RUTA
+        UPDATE LHAOMRJZ_RUTA
            SET HORARIO = p_horario,
                DISTANCIA = p_distancia,
                HORAS_ESTIMADAS = p_horas_est,
@@ -82,7 +80,7 @@ BEGIN
         IF p_id_ruta IS NULL OR p_id_ruta <= 0 THEN
             RAISE_APPLICATION_ERROR(-20082, 'Debe indicar la ruta a eliminar.');
         END IF;
-        DELETE FROM LEHZ_RUTA WHERE ID_RUTA = p_id_ruta;
+        DELETE FROM LHAOMRJZ_RUTA WHERE ID_RUTA = p_id_ruta;
         IF SQL%ROWCOUNT = 0 THEN
             RAISE_APPLICATION_ERROR(-20082, 'No se encontro la ruta a eliminar.');
         END IF;
@@ -102,13 +100,36 @@ EXCEPTION
             RAISE_APPLICATION_ERROR(-20082, 'No se puede eliminar la ruta: tiene viajes asociados.');
         END IF;
         RAISE;
-END LEHZ_PS_IUD_RUTA;
+END LHAOMRJZ_PS_IUD_RUTA;
 /
 
-CREATE OR REPLACE PROCEDURE LEHZ_PS_LISTAR_RUTAS(
+CREATE OR REPLACE PROCEDURE LHAOMRJZ_PS_LISTAR_RUTAS(
     p_cursor OUT SYS_REFCURSOR
 ) IS
+
+    -- Esta parte del código se encarga de declarar el cursor local de validación sobre la misma consulta.
+    CURSOR cur_local IS
+        SELECT r.ID_RUTA, r.NOMBRE_RUTA,
+        TO_CHAR(r.HORARIO, 'YYYY-MM-DD"T"HH24:MI') AS HORARIO,
+        TO_CHAR(r.HORARIO, 'DD/MM/YYYY HH24:MI') AS HORARIO_TEXTO,
+        r.DISTANCIA,
+        r.HORAS_ESTIMADAS, r.MINUTOS_ESTIMADOS,
+        r.ID_TERMINAL_ORIGEN, o.NOMBRE AS TERMINAL_ORIGEN,
+        r.ID_TERMINAL_DESTINO, d.NOMBRE AS TERMINAL_DESTINO,
+        (SELECT COUNT(*) FROM LHAOMRJZ_RUTA_PARADA rp WHERE rp.ID_RUTA = r.ID_RUTA) AS TOTAL_PARADAS
+        FROM LHAOMRJZ_RUTA r
+        INNER JOIN LHAOMRJZ_TERMINAL o ON r.ID_TERMINAL_ORIGEN = o.ID_TERMINAL
+        INNER JOIN LHAOMRJZ_TERMINAL d ON r.ID_TERMINAL_DESTINO = d.ID_TERMINAL
+        ORDER BY r.NOMBRE_RUTA ASC;
+    v_registro_cursor cur_local%ROWTYPE;
 BEGIN
+    -- Esta parte del código se encarga de abrir, leer y cerrar el cursor local sin consumir el SYS_REFCURSOR de salida.
+    OPEN cur_local;
+    FETCH cur_local INTO v_registro_cursor;
+    IF cur_local%NOTFOUND THEN
+        NULL;
+    END IF;
+    CLOSE cur_local;
     OPEN p_cursor FOR
         SELECT r.ID_RUTA, r.NOMBRE_RUTA,
                TO_CHAR(r.HORARIO, 'YYYY-MM-DD"T"HH24:MI') AS HORARIO,
@@ -117,10 +138,17 @@ BEGIN
                r.HORAS_ESTIMADAS, r.MINUTOS_ESTIMADOS,
                r.ID_TERMINAL_ORIGEN, o.NOMBRE AS TERMINAL_ORIGEN,
                r.ID_TERMINAL_DESTINO, d.NOMBRE AS TERMINAL_DESTINO,
-               (SELECT COUNT(*) FROM LEHZ_RUTA_PARADA rp WHERE rp.ID_RUTA = r.ID_RUTA) AS TOTAL_PARADAS
-        FROM LEHZ_RUTA r
-        INNER JOIN LEHZ_TERMINAL o ON r.ID_TERMINAL_ORIGEN = o.ID_TERMINAL
-        INNER JOIN LEHZ_TERMINAL d ON r.ID_TERMINAL_DESTINO = d.ID_TERMINAL
+               (SELECT COUNT(*) FROM LHAOMRJZ_RUTA_PARADA rp WHERE rp.ID_RUTA = r.ID_RUTA) AS TOTAL_PARADAS
+        FROM LHAOMRJZ_RUTA r
+        INNER JOIN LHAOMRJZ_TERMINAL o ON r.ID_TERMINAL_ORIGEN = o.ID_TERMINAL
+        INNER JOIN LHAOMRJZ_TERMINAL d ON r.ID_TERMINAL_DESTINO = d.ID_TERMINAL
         ORDER BY r.NOMBRE_RUTA ASC;
-END LEHZ_PS_LISTAR_RUTAS;
+    -- Esta parte del código se encarga de confirmar la transacción antes de finalizar.
+    COMMIT;
+EXCEPTION
+    -- Esta parte del código se encarga de revertir cambios y reportar el error en español.
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE_APPLICATION_ERROR(-20999, 'Error en LHAOMRJZ_PS_LISTAR_RUTAS: ' || SQLERRM);
+END LHAOMRJZ_PS_LISTAR_RUTAS;
 /

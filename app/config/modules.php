@@ -1,14 +1,11 @@
 <?php
-/**
- * Metadatos de presentacion. Las listas de valores, validaciones y permisos
- * viven en Oracle; aqui solo se describe como dibujar cada formulario.
- */
+// Esta parte del código se encarga de describir formularios; Oracle valida y autoriza.
 
 $maintainers = [
     'regiones' => [
         'title' => 'Regiones',
-        'proc'  => 'LEHZ_PS_IUD_REGION',
-        'list'  => 'LEHZ_PS_LISTAR_REGIONES',
+        'proc'  => 'LHAOMRJZ_PS_IUD_REGION',
+        'list'  => 'LHAOMRJZ_PS_LISTAR_REGIONES',
         'id'    => [['name' => 'ID_REGION', 'param' => 'p_id_region', 'auto' => true]],
         'fields' => [
             ['name' => 'NOMBRE_REGION', 'param' => 'p_nombre_region', 'label' => 'Region de Chile', 'type' => 'select', 'source' => 'regiones_chile'],
@@ -16,8 +13,8 @@ $maintainers = [
     ],
     'comunas' => [
         'title' => 'Comunas',
-        'proc'  => 'LEHZ_PS_IUD_COMUNA',
-        'list'  => 'LEHZ_PS_LISTAR_COMUNAS',
+        'proc'  => 'LHAOMRJZ_PS_IUD_COMUNA',
+        'list'  => 'LHAOMRJZ_PS_LISTAR_COMUNAS',
         'id'    => [['name' => 'ID_COMUNA', 'param' => 'p_id_comuna', 'auto' => true]],
         'fields' => [
             ['name' => 'NOMBRE_COMUNA', 'param' => 'p_nombre_comuna', 'label' => 'Comuna de Chile', 'type' => 'select', 'source' => 'comunas_chile'],
@@ -25,8 +22,8 @@ $maintainers = [
     ],
     'terminales' => [
         'title' => 'Terminales',
-        'proc'  => 'LEHZ_PS_IUD_TERMINAL',
-        'list'  => 'LEHZ_PS_LISTAR_TERMINALES',
+        'proc'  => 'LHAOMRJZ_PS_IUD_TERMINAL',
+        'list'  => 'LHAOMRJZ_PS_LISTAR_TERMINALES',
         'id'    => [['name' => 'ID_TERMINAL', 'param' => 'p_id_terminal', 'auto' => true]],
         'fields' => [
             ['name' => 'NOMBRE', 'param' => 'p_nombre', 'label' => 'Nombre del terminal', 'type' => 'text'],
@@ -37,8 +34,8 @@ $maintainers = [
     ],
     'empresas' => [
         'title' => 'Empresas',
-        'proc'  => 'LEHZ_PS_IUD_EMPRESA',
-        'list'  => 'LEHZ_PS_LISTAR_EMPRESAS',
+        'proc'  => 'LHAOMRJZ_PS_IUD_EMPRESA',
+        'list'  => 'LHAOMRJZ_PS_LISTAR_EMPRESAS',
         'id'    => [['name' => 'RUT_EMPRESA', 'param' => 'p_rut_empresa', 'label' => 'RUT de la empresa', 'placeholder' => '7 u 8 digitos, con o sin DV']],
         'fields' => [
             ['name' => 'RAZON_SOCIAL', 'param' => 'p_razon_social', 'label' => 'Nombre de la empresa', 'type' => 'text'],
@@ -48,8 +45,8 @@ $maintainers = [
     ],
     'buses' => [
         'title' => 'Buses',
-        'proc'  => 'LEHZ_PS_IUD_BUS',
-        'list'  => 'LEHZ_PS_LISTAR_BUSES',
+        'proc'  => 'LHAOMRJZ_PS_IUD_BUS',
+        'list'  => 'LHAOMRJZ_PS_LISTAR_BUSES',
         'id'    => [['name' => 'PATENTE_BUS', 'param' => 'p_patente', 'label' => 'Patente del bus', 'placeholder' => 'Ej. BCDF12']],
         'fields' => [
             ['name' => 'MARCA', 'param' => 'p_marca', 'label' => 'Marca', 'type' => 'text'],
@@ -64,8 +61,8 @@ $maintainers = [
     ],
     'asientos' => [
         'title' => 'Asientos',
-        'proc'  => 'LEHZ_PS_IUD_ASIENTO',
-        'list'  => 'LEHZ_PS_LISTAR_ASIENTOS',
+        'proc'  => 'LHAOMRJZ_PS_IUD_ASIENTO',
+        'list'  => 'LHAOMRJZ_PS_LISTAR_ASIENTOS',
         'id'    => [
             ['name' => 'NUMERO_ASIENTO', 'param' => 'p_nro_asiento', 'label' => 'Numero de asiento', 'type' => 'number'],
             ['name' => 'PATENTE_BUS', 'param' => 'p_patente', 'label' => 'Bus', 'source' => 'buses'],
@@ -77,8 +74,8 @@ $maintainers = [
     ],
     'conductores' => [
         'title' => 'Conductores',
-        'proc'  => 'LEHZ_PS_IUD_CONDUCTOR',
-        'list'  => 'LEHZ_PS_LISTAR_CONDUCTORES',
+        'proc'  => 'LHAOMRJZ_PS_IUD_CONDUCTOR',
+        'list'  => 'LHAOMRJZ_PS_LISTAR_CONDUCTORES',
         'id'    => [['name' => 'RUT_CONDUCTOR', 'param' => 'p_rut', 'label' => 'RUT del conductor', 'placeholder' => '7 u 8 digitos, con o sin DV']],
         'fields' => [
             ['name' => 'NOMBRE_CONDUCTOR', 'param' => 'p_nombre', 'label' => 'Nombre', 'type' => 'text'],
@@ -92,8 +89,8 @@ $maintainers = [
     ],
     'mecanicos' => [
         'title' => 'Mecanicos',
-        'proc'  => 'LEHZ_PS_IUD_MECANICO',
-        'list'  => 'LEHZ_PS_LISTAR_MECANICOS',
+        'proc'  => 'LHAOMRJZ_PS_IUD_MECANICO',
+        'list'  => 'LHAOMRJZ_PS_LISTAR_MECANICOS',
         'id'    => [['name' => 'RUT_MECANICO', 'param' => 'p_rut', 'label' => 'RUT del mecanico', 'placeholder' => '7 u 8 digitos, con o sin DV']],
         'fields' => [
             ['name' => 'NOMBRE_MECANICO', 'param' => 'p_nombre', 'label' => 'Nombre', 'type' => 'text'],
@@ -106,8 +103,8 @@ $maintainers = [
     ],
     'rutas' => [
         'title' => 'Rutas',
-        'proc'  => 'LEHZ_PS_IUD_RUTA',
-        'list'  => 'LEHZ_PS_LISTAR_RUTAS',
+        'proc'  => 'LHAOMRJZ_PS_IUD_RUTA',
+        'list'  => 'LHAOMRJZ_PS_LISTAR_RUTAS',
         'id'    => [['name' => 'ID_RUTA', 'param' => 'p_id_ruta', 'auto' => true]],
         'fields' => [
             ['name' => 'NOMBRE_RUTA', 'param' => 'p_nombre_ruta', 'label' => 'Nombre de la ruta', 'type' => 'text'],
@@ -121,8 +118,8 @@ $maintainers = [
     ],
     'paradas' => [
         'title' => 'Paradas por ruta',
-        'proc'  => 'LEHZ_PS_IUD_RUTA_PARADA',
-        'list'  => 'LEHZ_PS_LISTAR_RUTA_PARADAS',
+        'proc'  => 'LHAOMRJZ_PS_IUD_RUTA_PARADA',
+        'list'  => 'LHAOMRJZ_PS_LISTAR_RUTA_PARADAS',
         'id'    => [['name' => 'ID_RUTA_PARADA', 'param' => 'p_id_ruta_parada', 'auto' => true]],
         'fields' => [
             ['name' => 'ID_RUTA', 'param' => 'p_id_ruta', 'label' => 'Ruta', 'type' => 'select', 'source' => 'rutas'],
@@ -134,8 +131,8 @@ $maintainers = [
     ],
     'horarios' => [
         'title' => 'Horarios',
-        'proc'  => 'LEHZ_PS_IUD_HORARIO',
-        'list'  => 'LEHZ_PS_LISTAR_HORARIOS',
+        'proc'  => 'LHAOMRJZ_PS_IUD_HORARIO',
+        'list'  => 'LHAOMRJZ_PS_LISTAR_HORARIOS',
         'id'    => [['name' => 'ID_HORARIO', 'param' => 'p_id_horario', 'auto' => true]],
         'fields' => [
             ['name' => 'HORARIO', 'param' => 'p_horario_val', 'label' => 'Codigo de horario', 'type' => 'number'],
@@ -146,8 +143,8 @@ $maintainers = [
     ],
     'pasajeros' => [
         'title' => 'Pasajeros',
-        'proc'  => 'LEHZ_PS_IUD_PASAJERO',
-        'list'  => 'LEHZ_PS_LISTAR_PASAJEROS',
+        'proc'  => 'LHAOMRJZ_PS_IUD_PASAJERO',
+        'list'  => 'LHAOMRJZ_PS_LISTAR_PASAJEROS',
         'id'    => [['name' => 'RUT_PASAJERO', 'param' => 'p_rut', 'label' => 'RUT del pasajero', 'placeholder' => '7 u 8 digitos, con o sin DV']],
         'fields' => [
             ['name' => 'NOMBRE_PASAJERO', 'param' => 'p_nombre', 'label' => 'Nombre', 'type' => 'text'],
@@ -160,27 +157,27 @@ $maintainers = [
 ];
 
 $lookups = [
-    'regiones'         => ['proc' => 'LEHZ_PS_LISTAR_REGIONES', 'value' => 'ID_REGION', 'label' => ['NOMBRE_REGION']],
-    'regiones_chile'   => ['proc' => 'LEHZ_PS_LISTAR_REGIONES_CHILE', 'value' => 'VALOR', 'label' => ['ETIQUETA']],
-    'comunas_chile'    => ['proc' => 'LEHZ_PS_LISTAR_COMUNAS_CHILE', 'value' => 'VALOR', 'label' => ['ETIQUETA']],
-    'comunas'     => ['proc' => 'LEHZ_PS_LISTAR_COMUNAS', 'value' => 'ID_COMUNA', 'label' => ['NOMBRE_COMUNA', 'NOMBRE_REGION']],
-    'terminales'  => ['proc' => 'LEHZ_PS_LISTAR_TERMINALES', 'value' => 'ID_TERMINAL', 'label' => ['NOMBRE', 'NOMBRE_COMUNA']],
-    'empresas'    => ['proc' => 'LEHZ_PS_LISTAR_EMPRESAS', 'value' => 'RUT_EMPRESA', 'label' => ['RAZON_SOCIAL']],
-    'buses'       => ['proc' => 'LEHZ_PS_LISTAR_BUSES', 'value' => 'PATENTE_BUS', 'label' => ['PATENTE_BUS', 'MARCA', 'MODELO']],
-    'rutas'       => ['proc' => 'LEHZ_PS_LISTAR_RUTAS', 'value' => 'ID_RUTA', 'label' => ['ID_RUTA', 'NOMBRE_RUTA']],
-    'conductores' => ['proc' => 'LEHZ_PS_LISTAR_CONDUCTORES', 'value' => 'RUT_CONDUCTOR', 'label' => ['RUT_CONDUCTOR', 'NOMBRE_CONDUCTOR', 'APELLIDO1_CONDUCTOR']],
-    'mecanicos'   => ['proc' => 'LEHZ_PS_LISTAR_MECANICOS', 'value' => 'RUT_MECANICO', 'label' => ['RUT_MECANICO', 'NOMBRE_MECANICO', 'APELLIDO1_MECANICO']],
-    'pasajeros'   => ['proc' => 'LEHZ_PS_LISTAR_PASAJEROS', 'value' => 'RUT_PASAJERO', 'label' => ['RUT_PASAJERO', 'NOMBRE_COMPLETO']],
-    'viajes'      => ['proc' => 'LEHZ_PS_LISTAR_VIAJES', 'value' => 'ID_VIAJE', 'label' => ['ID_VIAJE', 'FECHA_VIAJE', 'NOMBRE_RUTA', 'HORA_SALIDA', 'TERMINAL_ORIGEN', 'TERMINAL_DESTINO']],
-    'horarios'    => ['proc' => 'LEHZ_PS_LISTAR_HORARIOS', 'value' => 'ID_HORARIO', 'label' => ['ID_HORARIO', 'RANGO']],
-    'roles'       => ['proc' => 'LEHZ_PS_LISTAR_ROLES', 'value' => 'NOMBRE_ROL', 'label' => ['NOMBRE_ROL']],
+    'regiones'         => ['proc' => 'LHAOMRJZ_PS_LISTAR_REGIONES', 'value' => 'ID_REGION', 'label' => ['NOMBRE_REGION']],
+    'regiones_chile'   => ['proc' => 'LHAOMRJZ_PS_LISTAR_REGIONES_CHILE', 'value' => 'VALOR', 'label' => ['ETIQUETA']],
+    'comunas_chile'    => ['proc' => 'LHAOMRJZ_PS_LISTAR_COMUNAS_CHILE', 'value' => 'VALOR', 'label' => ['ETIQUETA']],
+    'comunas'     => ['proc' => 'LHAOMRJZ_PS_LISTAR_COMUNAS', 'value' => 'ID_COMUNA', 'label' => ['NOMBRE_COMUNA', 'NOMBRE_REGION']],
+    'terminales'  => ['proc' => 'LHAOMRJZ_PS_LISTAR_TERMINALES', 'value' => 'ID_TERMINAL', 'label' => ['NOMBRE', 'NOMBRE_COMUNA']],
+    'empresas'    => ['proc' => 'LHAOMRJZ_PS_LISTAR_EMPRESAS', 'value' => 'RUT_EMPRESA', 'label' => ['RAZON_SOCIAL']],
+    'buses'       => ['proc' => 'LHAOMRJZ_PS_LISTAR_BUSES', 'value' => 'PATENTE_BUS', 'label' => ['PATENTE_BUS', 'MARCA', 'MODELO']],
+    'rutas'       => ['proc' => 'LHAOMRJZ_PS_LISTAR_RUTAS', 'value' => 'ID_RUTA', 'label' => ['ID_RUTA', 'NOMBRE_RUTA']],
+    'conductores' => ['proc' => 'LHAOMRJZ_PS_LISTAR_CONDUCTORES', 'value' => 'RUT_CONDUCTOR', 'label' => ['RUT_CONDUCTOR', 'NOMBRE_CONDUCTOR', 'APELLIDO1_CONDUCTOR']],
+    'mecanicos'   => ['proc' => 'LHAOMRJZ_PS_LISTAR_MECANICOS', 'value' => 'RUT_MECANICO', 'label' => ['RUT_MECANICO', 'NOMBRE_MECANICO', 'APELLIDO1_MECANICO']],
+    'pasajeros'   => ['proc' => 'LHAOMRJZ_PS_LISTAR_PASAJEROS', 'value' => 'RUT_PASAJERO', 'label' => ['RUT_PASAJERO', 'NOMBRE_COMPLETO']],
+    'viajes'      => ['proc' => 'LHAOMRJZ_PS_LISTAR_VIAJES', 'value' => 'ID_VIAJE', 'label' => ['ID_VIAJE', 'FECHA_VIAJE', 'NOMBRE_RUTA', 'HORA_SALIDA', 'TERMINAL_ORIGEN', 'TERMINAL_DESTINO']],
+    'horarios'    => ['proc' => 'LHAOMRJZ_PS_LISTAR_HORARIOS', 'value' => 'ID_HORARIO', 'label' => ['ID_HORARIO', 'RANGO']],
+    'roles'       => ['proc' => 'LHAOMRJZ_PS_LISTAR_ROLES', 'value' => 'NOMBRE_ROL', 'label' => ['NOMBRE_ROL']],
 ];
 
 $reports = [
-    'recaudacion'   => ['title' => 'Recaudacion por viaje', 'proc' => 'LEHZ_PS_REP_RECAUDACION_VIAJES'],
-    'rep_mantencion'=> ['title' => 'Costos de mantenimiento', 'proc' => 'LEHZ_PS_REP_COSTOS_MANTENCION'],
-    'ocupacion'     => ['title' => 'Ocupacion de asientos', 'proc' => 'LEHZ_PS_REP_OCUPACION_ASIENTOS'],
-    'itinerario'    => ['title' => 'Itinerario y paradas', 'proc' => 'LEHZ_PS_REP_ITINERARIO_PARADAS'],
+    'recaudacion'   => ['title' => 'Recaudacion por viaje', 'proc' => 'LHAOMRJZ_PS_REP_RECAUDACION_VIAJES'],
+    'rep_mantencion'=> ['title' => 'Costos de mantenimiento', 'proc' => 'LHAOMRJZ_PS_REP_COSTOS_MANTENCION'],
+    'ocupacion'     => ['title' => 'Ocupacion de asientos', 'proc' => 'LHAOMRJZ_PS_REP_OCUPACION_ASIENTOS'],
+    'itinerario'    => ['title' => 'Itinerario y paradas', 'proc' => 'LHAOMRJZ_PS_REP_ITINERARIO_PARADAS'],
 ];
 
 return [
